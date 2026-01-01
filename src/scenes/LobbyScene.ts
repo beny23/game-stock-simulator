@@ -53,16 +53,16 @@ export class LobbyScene extends Phaser.Scene {
         })
         .setOrigin(0, 0);
 
-      new TextButton(this, 360, y + 12, {
-        width: 90,
-        height: 26,
+      new TextButton(this, 362, y + 12, {
+        width: 76,
+        height: 24,
         label: 'Remove',
         onClick: () => {
           const next = removePlayer(state, p.id);
           saveGame(next);
           this.scene.restart();
         }
-      }).setScale(0.85);
+      });
     });
 
     new TextButton(this, width - 220, height - 160, {
@@ -95,7 +95,7 @@ export class LobbyScene extends Phaser.Scene {
       height: 50,
       label: 'Back to Home',
       onClick: () => this.scene.start('home')
-    }).setScale(0.9);
+    });
 
     const onResize = () => this.scene.restart();
     this.scale.on('resize', onResize);

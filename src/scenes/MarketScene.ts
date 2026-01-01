@@ -12,13 +12,14 @@ import {
   toggleSelectedEventAlt
 } from '../state/store';
 import { OrderSide } from '../state/types';
-import { Panel, TextButton } from '../ui/widgets';
+import { Panel, TextButton, TradeConfirmDialog } from '../ui/widgets';
 
 export class MarketScene extends Phaser.Scene {
   private selectedPlayerId?: string;
   private selectedTicker?: string;
   private selectedSide: OrderSide = 'BUY';
-  private shareBuffer = '';
+  private eventScrollIndex = 0;
+  private modalOpen = false;
 
   constructor() {
     super('market');
@@ -173,6 +174,13 @@ export class MarketScene extends Phaser.Scene {
     const rightX = leftW + centerW;
     const right = new Panel(this, rightX, headerH, rightW, height - headerH);
 
+    const rightInnerX = rightX + 20;
+    const rightInnerW = rightW - 40;
+    const rightGap = 12;
+    const rightHalfW = (rightInnerW - rightGap) / 2;
+    const rightCol1X = rightInnerX + rightHalfW / 2;
+    const rightCol2X = rightInnerX + rightHalfW + rightGap + rightHalfW / 2;
+
     right.add(
       this.add
         .text(16, 12, 'GM Controls', {
@@ -200,7 +208,7 @@ export class MarketScene extends Phaser.Scene {
 
     // Trading open/close
     new TextButton(this, rightX + rightW / 2, headerH + 130, {
-      width: rightW - 40,
+      width: rightInnerW,
       height: 50,
       label: state.tradingOpen ? 'Close Trading' : 'Open Trading',
       onClick: () => {
@@ -211,8 +219,8 @@ export class MarketScene extends Phaser.Scene {
     });
 
     // Buy/sell toggle
-    new TextButton(this, rightX + rightW / 2, headerH + 195, {
-      width: (rightW - 52) / 2,
+    new TextButton(this, rightCol1X, headerH + 195, {
+      width: rightHalfW,
       height: 44,
       label: this.selectedSide === 'BUY' ? 'BUY ✓' : 'BUY',
       onClick: () => {
@@ -220,8 +228,8 @@ export class MarketScene extends Phaser.Scene {
         this.scene.restart();
       }
     });
-    new TextButton(this, rightX + rightW / 2 + (rightW - 52) / 2 + 12, headerH + 195, {
-      width: (rightW - 52) / 2,
+    new TextButton(this, rightCol2X, headerH + 195, {
+      width: rightHalfW,
       height: 44,
       label: this.selectedSide === 'SELL' ? 'SELL ✓' : 'SELL',
       onClick: () => {
@@ -230,19 +238,19 @@ export class MarketScene extends Phaser.Scene {
       }
     });
 
-    // Shares input (keyboard)
-    const sharesLabel = this.add
-      .text(rightX + 16, headerH + 240, `Stock: ${this.selectedTicker ?? '—'}\nShares (type digits): ${this.shareBuffer || '—'}`, {
+    // Trade info
+    const tradeInfo = this.add
+      .text(16, 232, `Stock: ${this.selectedTicker ?? '—'}\nEach trade = 1 share`, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '16px',
         color: '#e8eefc',
         lineSpacing: 6
       })
       .setOrigin(0, 0);
-    right.add(sharesLabel);
+    right.add(tradeInfo);
 
     const errorText = this.add
-      .text(rightX + 16, headerH + 298, '', {
+      .text(16, 282, '', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '14px',
         color: '#ffadad'
@@ -250,31 +258,78 @@ export class MarketScene extends Phaser.Scene {
       .setOrigin(0, 0);
     right.add(errorText);
 
+    const requestPlaceTrade = () => {
+      if (this.modalOpen) return;
+      const shares = 1;
+      const pid = this.selectedPlayerId;
+      const ticker = this.selectedTicker;
+      if (!pid || !ticker) return;
+
+      if (!state.tradingOpen) {
+        errorText.setText('Trading is closed.');
+        return;
+      }
+
+      const player = state.players.find((p) => p.id === pid);
+      const stock = state.stocks.find((s) => s.ticker === ticker);
+      if (!player || !stock) return;
+
+      const cost = stock.price * shares;
+      const owned = player.holdings[ticker] ?? 0;
+      const action = this.selectedSide === 'BUY' ? 'Buy' : 'Sell';
+
+      this.modalOpen = true;
+      new TradeConfirmDialog(
+        this,
+        width / 2,
+        height / 2,
+        {
+          title: 'Confirm Trade',
+          lines: [
+            `Player: ${player.name}`,
+            `Action: ${action}`,
+            `Stock: ${stock.ticker} (${stock.name})`,
+            `Shares: 1`,
+            `Price: ${stock.price} each`,
+            this.selectedSide === 'BUY' ? `Total cost: ${cost}` : `Total received: ${cost}`,
+            `Cash: ${player.cash}   Owned: ${owned}`
+          ],
+          confirmLabel: 'Confirm (Enter)',
+          cancelLabel: 'Cancel (Esc)'
+        },
+        {
+          onConfirm: () => {
+            const { next, error } = placeOrder(state, pid, ticker, this.selectedSide, shares);
+            if (error) {
+              this.modalOpen = false;
+              errorText.setText(error);
+              return;
+            }
+            saveGame(next);
+            this.modalOpen = false;
+            this.scene.restart();
+          },
+          onCancel: () => {
+            this.modalOpen = false;
+          }
+        }
+      );
+    };
+
     new TextButton(this, rightX + rightW / 2, headerH + 330, {
-      width: rightW - 40,
+      width: rightInnerW,
       height: 52,
       label: 'Place Trade (Enter)',
       onClick: () => {
-        const shares = Number(this.shareBuffer);
-        const pid = this.selectedPlayerId;
-        const ticker = this.selectedTicker;
-        if (!pid || !ticker) return;
-        const { next, error } = placeOrder(state, pid, ticker, this.selectedSide, shares);
-        if (error) {
-          errorText.setText(error);
-          return;
-        }
-        this.shareBuffer = '';
-        saveGame(next);
-        this.scene.restart();
+        requestPlaceTrade();
       }
     });
 
-    // Event picker
+    // Event picker (scrollable list)
     const events = getEvents();
     right.add(
       this.add
-        .text(16, headerH + 392, 'Event card (GM chooses):', {
+        .text(16, headerH + 382, 'Event cards (GM chooses):', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
           fontSize: '16px',
           color: '#b9c7ee'
@@ -282,58 +337,114 @@ export class MarketScene extends Phaser.Scene {
         .setOrigin(0, 0)
     );
 
-    const selectedEvent = state.selectedEventId ? events.find((e) => e.id === state.selectedEventId) : undefined;
+    const selectedEventIndex = Math.max(0, events.findIndex((e) => e.id === state.selectedEventId));
+    const selectedEvent = events[selectedEventIndex];
 
-    const eventTitle = this.add
-      .text(rightX + 16, headerH + 420, selectedEvent ? selectedEvent.title : '—', {
+    // Keep selection visible
+    const listRows = 7;
+    if (selectedEventIndex < this.eventScrollIndex) this.eventScrollIndex = selectedEventIndex;
+    if (selectedEventIndex >= this.eventScrollIndex + listRows) this.eventScrollIndex = selectedEventIndex - (listRows - 1);
+    this.eventScrollIndex = Math.max(0, Math.min(this.eventScrollIndex, Math.max(0, events.length - listRows)));
+
+    const listX = rightX + 16;
+    const listY = headerH + 410;
+    const listW = rightW - 32;
+    const rowH = 28;
+
+    const listBg = this.add
+      .rectangle(listX, listY, listW, rowH * listRows + 10, 0x0f1730, 1)
+      .setOrigin(0, 0)
+      .setStrokeStyle(2, 0x334166, 1);
+    right.add(listBg);
+
+    for (let r = 0; r < listRows; r++) {
+      const idx = this.eventScrollIndex + r;
+      if (idx >= events.length) break;
+      const e = events[idx];
+      const y = listY + 6 + r * rowH;
+      const isSel = e.id === state.selectedEventId;
+
+      const hit = this.add
+        .rectangle(listX + 6, y, listW - 12, rowH - 2, isSel ? 0x22305a : 0x0f1730, 1)
+        .setOrigin(0, 0)
+        .setInteractive({ useHandCursor: true });
+      hit.on('pointerdown', () => {
+        const next = setSelectedEvent(state, e.id);
+        saveGame(next);
+        this.scene.restart();
+      });
+
+      const label = this.add
+        .text(listX + 12, y + 4, `${idx + 1}. ${e.title}`, {
+          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+          fontSize: '12px',
+          color: isSel ? '#ffffff' : '#d6e2ff',
+          wordWrap: { width: listW - 28 }
+        })
+        .setOrigin(0, 0);
+
+      right.add(hit);
+      right.add(label);
+    }
+
+    const scrollUp = () => {
+      this.eventScrollIndex = Math.max(0, this.eventScrollIndex - 1);
+      this.scene.restart();
+    };
+    const scrollDown = () => {
+      this.eventScrollIndex = Math.min(Math.max(0, events.length - listRows), this.eventScrollIndex + 1);
+      this.scene.restart();
+    };
+
+    new TextButton(this, rightCol1X, headerH + 620, {
+      width: rightHalfW,
+      height: 44,
+      label: 'Up',
+      onClick: scrollUp
+    });
+
+    new TextButton(this, rightCol2X, headerH + 620, {
+      width: rightHalfW,
+      height: 44,
+      label: 'Down',
+      onClick: scrollDown
+    });
+
+    new TextButton(this, rightX + rightW / 2, headerH + 672, {
+      width: rightW - 40,
+      height: 44,
+      label: 'Random Event',
+      onClick: () => {
+        const choice = events[Math.floor(Math.random() * events.length)];
+        const next = setSelectedEvent(state, choice.id);
+        saveGame(next);
+        this.scene.restart();
+      }
+    });
+
+    const detailsY = headerH + 720;
+    const detailsTitle = this.add
+      .text(rightX + 16, detailsY, selectedEvent ? selectedEvent.title : 'Pick an event', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '14px',
         color: '#e8eefc',
         wordWrap: { width: rightW - 32 }
       })
       .setOrigin(0, 0);
+    right.add(detailsTitle);
 
-    const eventExpl = this.add
-      .text(rightX + 16, headerH + 468, selectedEvent ? selectedEvent.explanation : '', {
+    const detailsExpl = this.add
+      .text(rightX + 16, detailsY + 40, selectedEvent ? selectedEvent.explanation : '', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '12px',
         color: '#8ea3d8',
         wordWrap: { width: rightW - 32 }
       })
       .setOrigin(0, 0);
-
-    right.add(eventTitle);
-    right.add(eventExpl);
-
-    // Quick cycle buttons (for MVP). Later we can add scroll/search.
-    new TextButton(this, rightX + rightW / 2, headerH + 540, {
-      width: (rightW - 52) / 2,
-      height: 44,
-      label: 'Prev',
-      onClick: () => {
-        const idx = Math.max(0, events.findIndex((e) => e.id === state.selectedEventId));
-        const nextIdx = (idx - 1 + events.length) % events.length;
-        const next = setSelectedEvent(state, events[nextIdx].id);
-        saveGame(next);
-        this.scene.restart();
-      }
-    });
-
-    new TextButton(this, rightX + rightW / 2 + (rightW - 52) / 2 + 12, headerH + 540, {
-      width: (rightW - 52) / 2,
-      height: 44,
-      label: 'Next',
-      onClick: () => {
-        const idx = Math.max(0, events.findIndex((e) => e.id === state.selectedEventId));
-        const nextIdx = (idx + 1) % events.length;
-        const next = setSelectedEvent(state, events[nextIdx].id);
-        saveGame(next);
-        this.scene.restart();
-      }
-    });
+    right.add(detailsExpl);
 
     if (selectedEvent?.impactPctAlt != null) {
-      new TextButton(this, rightX + rightW / 2, headerH + 592, {
+      new TextButton(this, rightX + rightW / 2, detailsY + 110, {
         width: rightW - 40,
         height: 44,
         label: state.selectedEventAlt ? 'Use Alt Impact ✓' : 'Use Alt Impact',
@@ -372,30 +483,10 @@ export class MarketScene extends Phaser.Scene {
 
     // Keyboard shortcuts for faster GM entry
     const onKeyDown = (ev: KeyboardEvent) => {
+      if (this.modalOpen) return;
       if (ev.key === 'Enter') {
-        const shares = Number(this.shareBuffer);
-        const pid = this.selectedPlayerId;
-        const ticker = this.selectedTicker;
-        if (!pid || !ticker) return;
-        const { next, error } = placeOrder(state, pid, ticker, this.selectedSide, shares);
-        if (error) {
-          errorText.setText(error);
-          return;
-        }
-        this.shareBuffer = '';
-        saveGame(next);
-        this.scene.restart();
+        requestPlaceTrade();
         return;
-      }
-      if (ev.key === 'Backspace') {
-        this.shareBuffer = this.shareBuffer.slice(0, -1);
-        this.scene.restart();
-        return;
-      }
-      if (/^[0-9]$/.test(ev.key)) {
-        if (this.shareBuffer.length >= 4) return;
-        this.shareBuffer += ev.key;
-        this.scene.restart();
       }
     };
 
@@ -404,9 +495,17 @@ export class MarketScene extends Phaser.Scene {
     const onResize = () => this.scene.restart();
     this.scale.on('resize', onResize);
 
+    const onWheel = (_pointer: Phaser.Input.Pointer, _over: any, _dx: number, dy: number) => {
+      // Scroll event list with mouse wheel/trackpad.
+      if (dy < 0) scrollUp();
+      if (dy > 0) scrollDown();
+    };
+    this.input.on('wheel', onWheel);
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.keyboard?.off('keydown', onKeyDown);
       this.scale.off('resize', onResize);
+      this.input.off('wheel', onWheel);
     });
 
     // Back

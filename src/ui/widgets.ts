@@ -147,3 +147,192 @@ export class KeyboardTextInput extends Phaser.GameObjects.Container {
     window.addEventListener('keydown', handler);
   }
 }
+
+export class KeyboardNumberInput extends Phaser.GameObjects.Container {
+  private readonly label: Phaser.GameObjects.Text;
+  private readonly valueText: Phaser.GameObjects.Text;
+  private value = '';
+  private done?: (value: number | undefined) => void;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, prompt: string) {
+    super(scene, x, y);
+
+    const panel = scene.add
+      .rectangle(0, 0, 520, 160, 0x0f1730, 1)
+      .setStrokeStyle(2, 0x334166, 1)
+      .setOrigin(0.5);
+
+    this.label = scene.add
+      .text(0, -50, prompt, {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        fontSize: '20px',
+        color: '#e8eefc'
+      })
+      .setOrigin(0.5);
+
+    this.valueText = scene.add
+      .text(0, 10, '', {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        fontSize: '28px',
+        color: '#b9c7ee'
+      })
+      .setOrigin(0.5);
+
+    const hint = scene.add
+      .text(0, 55, 'Digits only • Enter = OK • Esc = Cancel', {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        fontSize: '16px',
+        color: '#8ea3d8'
+      })
+      .setOrigin(0.5);
+
+    this.add([panel, this.label, this.valueText, hint]);
+    scene.add.existing(this);
+    this.setDepth(1500);
+  }
+
+  open(onDone: (value: number | undefined) => void, initialValue?: number) {
+    this.done = onDone;
+    this.value = initialValue != null && Number.isFinite(initialValue) ? String(initialValue) : '';
+    this.valueText.setText(this.value);
+
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        cleanup();
+        this.done?.(undefined);
+        this.destroy();
+        return;
+      }
+      if (event.key === 'Enter') {
+        const n = this.value.trim() ? Number(this.value) : NaN;
+        cleanup();
+        this.done?.(Number.isFinite(n) ? n : undefined);
+        this.destroy();
+        return;
+      }
+      if (event.key === 'Backspace') {
+        this.value = this.value.slice(0, -1);
+        this.valueText.setText(this.value);
+        return;
+      }
+      if (/^[0-9]$/.test(event.key)) {
+        if (this.value.length >= 4) return;
+        // Avoid leading zeros like 0002
+        if (this.value === '0') this.value = '';
+        this.value += event.key;
+        this.valueText.setText(this.value);
+      }
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('keydown', handler);
+    };
+
+    window.addEventListener('keydown', handler);
+  }
+}
+
+export type TradeConfirmDetails = {
+  title: string;
+  lines: string[];
+  confirmLabel?: string;
+  cancelLabel?: string;
+};
+
+export class TradeConfirmDialog extends Phaser.GameObjects.Container {
+  private readonly bgBlock: Phaser.GameObjects.Rectangle;
+  private readonly panel: Phaser.GameObjects.Rectangle;
+  private readonly titleText: Phaser.GameObjects.Text;
+  private readonly bodyText: Phaser.GameObjects.Text;
+  private readonly onConfirm: () => void;
+  private readonly onCancel: () => void;
+  private readonly keyHandler: (ev: KeyboardEvent) => void;
+
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    details: TradeConfirmDetails,
+    handlers: { onConfirm: () => void; onCancel: () => void }
+  ) {
+    super(scene, x, y);
+
+    this.onConfirm = handlers.onConfirm;
+    this.onCancel = handlers.onCancel;
+
+    const w = 620;
+    const h = 280;
+
+    // Fullscreen click-blocker
+    this.bgBlock = scene.add
+      .rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.55)
+      .setOrigin(0, 0)
+      .setInteractive();
+
+    this.panel = scene.add
+      .rectangle(0, 0, w, h, 0x0f1730, 1)
+      .setStrokeStyle(2, 0x334166, 1)
+      .setOrigin(0.5);
+
+    this.titleText = scene.add
+      .text(0, -h / 2 + 26, details.title, {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        fontSize: '22px',
+        color: '#e8eefc'
+      })
+      .setOrigin(0.5, 0);
+
+    this.bodyText = scene.add
+      .text(-w / 2 + 26, -h / 2 + 70, details.lines.join('\n'), {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        fontSize: '16px',
+        color: '#b9c7ee',
+        wordWrap: { width: w - 52 }
+      })
+      .setOrigin(0, 0);
+
+    const confirmBtn = new TextButton(scene, 0, h / 2 - 44, {
+      width: 220,
+      height: 48,
+      label: details.confirmLabel ?? 'Confirm',
+      onClick: () => {
+        this.onConfirm();
+        this.destroy();
+      }
+    });
+
+    const cancelBtn = new TextButton(scene, -240, h / 2 - 44, {
+      width: 180,
+      height: 48,
+      label: details.cancelLabel ?? 'Cancel',
+      onClick: () => {
+        this.onCancel();
+        this.destroy();
+      }
+    });
+
+    this.add([this.bgBlock, this.panel, this.titleText, this.bodyText, cancelBtn, confirmBtn]);
+    scene.add.existing(this);
+
+    this.setDepth(2000);
+
+    this.keyHandler = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        this.onCancel();
+        this.destroy();
+        return;
+      }
+      if (ev.key === 'Enter') {
+        this.onConfirm();
+        this.destroy();
+      }
+    };
+
+    window.addEventListener('keydown', this.keyHandler);
+  }
+
+  override destroy(fromScene?: boolean): void {
+    window.removeEventListener('keydown', this.keyHandler);
+    super.destroy(fromScene);
+  }
+}

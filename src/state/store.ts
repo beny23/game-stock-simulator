@@ -1,4 +1,5 @@
-import { DEFAULT_EVENTS, DEFAULT_STOCKS } from './content';
+import { DEFAULT_STOCKS } from './content';
+import { EVENT_DECK } from './eventDeck';
 import { GameState, MarketEvent, OrderSide, Player, Stock } from './types';
 
 const STORAGE_KEY = 'stock-camp-sim:v1';
@@ -52,7 +53,7 @@ export function toggleSelectedEventAlt(state: GameState): GameState {
 }
 
 export function getEvents(): MarketEvent[] {
-  return DEFAULT_EVENTS;
+  return EVENT_DECK;
 }
 
 export function getStocks(state: GameState): Stock[] {
@@ -131,6 +132,10 @@ function noiseForVolatility(vol: Stock['volatility']): number {
   }
 }
 
+function isCrashEvent(event: MarketEvent): boolean {
+  return /market crash/i.test(event.title);
+}
+
 export function resolveNextRound(state: GameState): { next: GameState; error?: string; appliedEvent?: MarketEvent } {
   const events = getEvents();
   const event = state.selectedEventId ? events.find((e) => e.id === state.selectedEventId) : undefined;
@@ -143,7 +148,7 @@ export function resolveNextRound(state: GameState): { next: GameState; error?: s
     if (event.scope === 'MARKET' && event.target === 'ALL') {
       eventImpact = impact;
       // Simple "defensive sector" teaching moment for the crash card.
-      if (event.id === 'e_market_crash' && s.sector === 'FOOD') {
+      if (isCrashEvent(event) && impact <= -0.08 && s.sector === 'FOOD') {
         eventImpact = -0.06;
       }
     } else if (event.scope === 'SECTOR' && event.target === s.sector) {
