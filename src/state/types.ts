@@ -1,0 +1,48 @@
+export type SectorId =
+  | 'TECH_MEDIA'
+  | 'ENERGY'
+  | 'TRANSPORT'
+  | 'HEALTH'
+  | 'FOOD';
+
+export type OrderSide = 'BUY' | 'SELL';
+
+export type Stock = {
+  ticker: string;
+  name: string;
+  sector: SectorId;
+  price: number;
+  volatility: 'LOW' | 'MED' | 'HIGH';
+};
+
+export type Player = {
+  id: string;
+  name: string;
+  cash: number;
+  holdings: Record<string, number>; // ticker -> shares
+};
+
+export type EventScope = 'COMPANY' | 'SECTOR' | 'MARKET';
+
+export type MarketEvent = {
+  id: string;
+  title: string;
+  scope: EventScope;
+  target: string; // ticker OR sector id OR 'ALL'
+  impactPct: number; // e.g. -0.03 = -3%
+  impactPctAlt?: number; // optional alternative impact for "uncertain" cards
+  explanation: string;
+};
+
+export type GameState = {
+  version: 1;
+  round: number;
+  tradingOpen: boolean;
+  startingCash: number;
+  players: Player[];
+  stocks: Stock[];
+  selectedEventId?: string;
+  selectedEventAlt?: boolean;
+  // track this round's net orders for a tiny imbalance effect
+  roundNetShares: Record<string, number>; // ticker -> net shares bought (buys - sells)
+};
