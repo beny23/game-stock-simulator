@@ -33,14 +33,19 @@ export class TextButton extends Phaser.GameObjects.Container {
 
     this.setSize(opts.width, opts.height);
     const pad = opts.hitPadding ?? 0;
-    this.setInteractive(
-      new Phaser.Geom.Rectangle(-opts.width / 2 - pad, -opts.height / 2 - pad, opts.width + pad * 2, opts.height + pad * 2),
-      Phaser.Geom.Rectangle.Contains
-    );
+    this.bg.setInteractive();
+    // Expand hit target without changing visuals.
+    if (pad > 0 && this.bg.input?.hitArea && this.bg.input.hitArea instanceof Phaser.Geom.Rectangle) {
+      this.bg.input.hitArea.x -= pad;
+      this.bg.input.hitArea.y -= pad;
+      this.bg.input.hitArea.width += pad * 2;
+      this.bg.input.hitArea.height += pad * 2;
+    }
+    if (this.bg.input) this.bg.input.cursor = 'pointer';
 
-    this.on('pointerover', () => this.bg.setFillStyle(0x25335a, 1));
-    this.on('pointerout', () => this.bg.setFillStyle(0x1f2a44, 1));
-    this.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event?: Event) => {
+    this.bg.on('pointerover', () => this.bg.setFillStyle(0x25335a, 1));
+    this.bg.on('pointerout', () => this.bg.setFillStyle(0x1f2a44, 1));
+    this.bg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event?: Event) => {
       event?.stopPropagation();
       this.bg.setFillStyle(0x2e3f70, 1);
       opts.onClick();
@@ -298,8 +303,15 @@ export class TradeConfirmDialog extends Phaser.GameObjects.Container {
       })
       .setOrigin(0, 0);
 
-    const confirmBtn = new TextButton(scene, 0, h / 2 - 44, {
-      width: 220,
+    const btnY = h / 2 - 44;
+    const confirmW = 220;
+    const cancelW = 180;
+    const gap = 18;
+    const confirmX = 80;
+    const cancelX = confirmX - (confirmW / 2 + cancelW / 2 + gap);
+
+    const confirmBtn = new TextButton(scene, confirmX, btnY, {
+      width: confirmW,
       height: 48,
       label: details.confirmLabel ?? 'Confirm',
       onClick: () => {
@@ -308,8 +320,8 @@ export class TradeConfirmDialog extends Phaser.GameObjects.Container {
       }
     });
 
-    const cancelBtn = new TextButton(scene, -240, h / 2 - 44, {
-      width: 180,
+    const cancelBtn = new TextButton(scene, cancelX, btnY, {
+      width: cancelW,
       height: 48,
       label: details.cancelLabel ?? 'Cancel',
       onClick: () => {

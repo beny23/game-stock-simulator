@@ -235,9 +235,9 @@ export class MarketScene extends Phaser.Scene {
     // Header mini widget: CAMP Index + sparkline
     {
       const widgetW = 240;
-      const widgetH = 46;
+      const widgetH = 40;
       const widgetX = Math.max(24, width - 200 - widgetW);
-      const widgetY = tickerH + 8;
+      const widgetY = tickerH + 4;
 
       const bg = this.add
         .rectangle(widgetX, widgetY, widgetW, widgetH, 0x0f1730, 0.9)
@@ -245,7 +245,7 @@ export class MarketScene extends Phaser.Scene {
         .setStrokeStyle(2, 0x334166, 1);
 
       const text = this.add
-        .text(widgetX + 10, widgetY + 9, `CAMP ${idxChg.now} ${fmtQuoteTail(idxChg.delta, idxChg.pct)}`, {
+        .text(widgetX + 10, widgetY + 7, `CAMP ${idxChg.now} ${fmtQuoteTail(idxChg.delta, idxChg.pct)}`, {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
           fontSize: '14px',
           color: colorForDelta(idxChg.delta)
@@ -254,9 +254,9 @@ export class MarketScene extends Phaser.Scene {
 
       const series = (priceHistory[MARKET_INDEX_KEY] ?? []).slice(-30);
       const sparkW = 78;
-      const sparkH = 26;
+      const sparkH = 22;
       const sparkX = widgetX + widgetW - sparkW - 10;
-      const sparkY = widgetY + 10;
+      const sparkY = widgetY + 9;
 
       const g = this.add.graphics();
       g.lineStyle(2, 0x8ea3d8, 1);
@@ -1381,8 +1381,8 @@ export class MarketScene extends Phaser.Scene {
       }
     }).setDepth(61);
 
-    // Back
-    new TextButton(this, width - 110, tickerH + 14, {
+    // Back (placed below the ticker bar)
+    new TextButton(this, width - 110, tickerH + 24, {
       width: 180,
       height: 40,
       label: 'Back to Lobby',
