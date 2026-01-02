@@ -10,12 +10,11 @@ import {
   getEvents
 } from '../state/store';
 import { OrderSide } from '../state/types';
-import { Panel, TextButton, TradeConfirmDialog } from '../ui/widgets';
+import { Panel, TextButton } from '../ui/widgets';
 
 export class MarketScene extends Phaser.Scene {
   private selectedPlayerId?: string;
   private selectedTicker?: string;
-  private confirmOpen = false;
   private viewMode: 'overview' | 'player' = 'overview';
   private initMessage?: string;
 
@@ -37,9 +36,6 @@ export class MarketScene extends Phaser.Scene {
     // Keep the top ticker running across MarketScene restarts.
     if (!this.scene.isActive('marketTicker')) this.scene.launch('marketTicker');
     this.scene.bringToTop('marketTicker');
-
-    // reset modal flags each create (scene.restart reuses instance)
-    this.confirmOpen = false;
 
     const { width, height } = this.scale;
 
@@ -297,7 +293,6 @@ export class MarketScene extends Phaser.Scene {
     this.selectedPlayerId = selectedId;
 
     const requestTrade = (ticker: string, side: OrderSide, playerIdOverride?: string) => {
-      if (this.confirmOpen) return;
       const shares = 1;
       const pid = playerIdOverride ?? this.selectedPlayerId;
       if (!pid) return;
@@ -305,49 +300,18 @@ export class MarketScene extends Phaser.Scene {
       const player = state.players.find((p) => p.id === pid);
       const stock = state.stocks.find((s) => s.ticker === ticker);
       if (!player || !stock) return;
-
-      const cost = stock.price * shares;
-      const owned = player.holdings[ticker] ?? 0;
       const action = side === 'BUY' ? 'Buy' : 'Sell';
 
       this.selectedTicker = ticker;
 
-      this.confirmOpen = true;
-      new TradeConfirmDialog(
-        this,
-        width / 2,
-        height / 2,
-        {
-          title: 'Confirm Trade',
-          lines: [
-            `Player: ${player.name}`,
-            `Action: ${action}`,
-            `Stock: ${stock.ticker} (${stock.name})`,
-            `Shares: 1`,
-            `Price: ${stock.price} each`,
-            side === 'BUY' ? `Total cost: ${cost}` : `Total received: ${cost}`,
-            `Cash: ${player.cash}   Owned: ${owned}`
-          ],
-          confirmLabel: 'Confirm (Enter)',
-          cancelLabel: 'Cancel (Esc)'
-        },
-        {
-          onConfirm: () => {
-            const { next, error } = placeOrder(state, pid, ticker, side, shares);
-            if (error) {
-              this.confirmOpen = false;
-              showError(player.name, error);
-              return;
-            }
-            recordActivity(next, player.name, `${action.toUpperCase()} 1 ${stock.ticker} @ ${stock.price}`, state.round);
-            this.confirmOpen = false;
-            this.scene.restart();
-          },
-          onCancel: () => {
-            this.confirmOpen = false;
-          }
-        }
-      );
+      // Immediate trades (no confirmation dialog).
+      const { next, error } = placeOrder(state, pid, ticker, side, shares);
+      if (error) {
+        showError(player.name, error);
+        return;
+      }
+      recordActivity(next, player.name, `${action.toUpperCase()} 1 ${stock.ticker} @ ${stock.price}`, state.round);
+      this.scene.restart();
     };
 
     // Browser-like tabs strip (Overview + each player)

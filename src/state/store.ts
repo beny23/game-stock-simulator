@@ -468,9 +468,59 @@ export function loadGame(): GameState | undefined {
     // Merge missing defaults so the market board always shows the full roster.
     {
       const savedByTicker = new Map(base.stocks.map((s) => [s.ticker, s] as const));
-      const mergedDefaults = DEFAULT_STOCKS.map((d) => savedByTicker.get(d.ticker) ?? structuredClone(d));
+      const mergedDefaults = DEFAULT_STOCKS.map((d) => {
+        const saved = savedByTicker.get(d.ticker);
+        if (!saved) return structuredClone(d);
+        // Keep canonical metadata (name/sector) from defaults, but preserve saved price/volatility.
+        return {
+          ...structuredClone(d),
+          price: typeof (saved as any).price === 'number' ? (saved as any).price : d.price,
+          volatility: (saved as any).volatility ?? d.volatility
+        };
+      });
       const extras = base.stocks.filter((s) => !DEFAULT_STOCKS.some((d) => d.ticker === s.ticker));
       base.stocks = [...mergedDefaults, ...extras];
+    }
+
+    // Normalize/repair saved news sector labels (some older saves could have incorrect stock sectors).
+    {
+      const eventsById = new Map(getEvents().map((e) => [e.id, e] as const));
+      const sectorNameById = new Map(SECTORS.map((s) => [s.id, s.name] as const));
+      const sectorByTicker = new Map(base.stocks.map((s) => [s.ticker, s.sector] as const));
+
+      const normalizeEntries = (entries: LastRoundNewsEntry[] | undefined): LastRoundNewsEntry[] | undefined => {
+        if (!entries?.length) return entries;
+        return entries.map((n) => {
+          const ev = eventsById.get(n.eventId);
+          if (!ev) return n;
+
+          if (ev.scope === 'SECTOR') {
+            const sid = ev.target as any;
+            const name = sectorNameById.get(sid);
+            return name ? { ...n, sectorId: sid, sectorName: name } : n;
+          }
+
+          if (ev.scope === 'COMPANY') {
+            const sid = sectorByTicker.get(ev.target);
+            const name = sid ? sectorNameById.get(sid) : undefined;
+            return sid && name ? { ...n, sectorId: sid, sectorName: name } : n;
+          }
+
+          // MARKET: leave as-is (these are assigned per-sector by design).
+          return n;
+        });
+      };
+
+      base.lastRoundNews = normalizeEntries(base.lastRoundNews);
+      base.currentNews = normalizeEntries(base.currentNews);
+
+      // Upcoming news is used for the next-round mechanic; if it looks inconsistent, regenerate cleanly.
+      const normalizedUpcoming = normalizeEntries(base.upcomingNews);
+      const uniqueSectors = new Set((normalizedUpcoming ?? []).map((n) => n.sectorId));
+      base.upcomingNews =
+        normalizedUpcoming && normalizedUpcoming.length === SECTORS.length && uniqueSectors.size === SECTORS.length
+          ? normalizedUpcoming
+          : pickSectorNews(base, getEvents());
     }
 
     // Ensure we always have upcoming headlines for the ticker.

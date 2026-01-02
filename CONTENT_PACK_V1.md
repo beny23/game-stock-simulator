@@ -677,8 +677,158 @@ How to run this crash (simple):
 - Expected: Uncertain, Medium | Impact: +0.04 OR -0.04 (GM chooses which)
 - Why: Mixed news can make investors unsure.
 
+107) “ByteBuddies outage frustrates users”
+- Scope: Company | Target: BBDY
+- Expected: Down, Medium | Impact: -0.04
+- Why: If the app isn’t working, people may leave.
+
+108) “ByteBuddies adds a fun new sticker pack”
+- Scope: Company | Target: BBDY
+- Expected: Up, Small | Impact: +0.02
+- Why: Small improvements can keep people excited.
+
+109) “StreamSprout creator program boosts uploads”
+- Scope: Company | Target: SSRT
+- Expected: Up, Medium | Impact: +0.04
+- Why: More creators can bring more viewers.
+
+110) “StreamSprout trend cycle slows”
+- Scope: Company | Target: SSRT
+- Expected: Down, Small | Impact: -0.03
+- Why: If fewer people watch, growth can cool off.
+
+111) “CloudKit fixes a big bug fast”
+- Scope: Company | Target: CKCR
+- Expected: Up, Small | Impact: +0.02
+- Why: Reliability makes customers trust the service.
+
+112) “CloudKit subscription price increase backlash”
+- Scope: Company | Target: CKCR
+- Expected: Down, Small | Impact: -0.02
+- Why: Some customers may cancel if it costs more.
+
+113) “SolarSprout breaks a production record”
+- Scope: Company | Target: SSPR
+- Expected: Up, Medium | Impact: +0.04
+- Why: Producing more can mean more sales.
+
+114) “SolarSprout shipment delay hits timelines”
+- Scope: Company | Target: SSPR
+- Expected: Down, Small | Impact: -0.03
+- Why: Delays can slow down revenue.
+
+115) “WindWay signs a long-term power contract”
+- Scope: Company | Target: WWPW
+- Expected: Up, Small | Impact: +0.03
+- Why: Long contracts can make income steadier.
+
+116) “WindWay faces a windy-day shutdown”
+- Scope: Company | Target: WWPW
+- Expected: Down, Small | Impact: -0.02
+- Why: If turbines stop, power sales drop.
+
+117) “HydroKite prototype performs better than expected”
+- Scope: Company | Target: HYDK
+- Expected: Up, Medium | Impact: +0.04
+- Why: Better performance can mean better profits later.
+
+118) “HydroKite permit paperwork slows a project”
+- Scope: Company | Target: HYDK
+- Expected: Down, Small | Impact: -0.02
+- Why: Waiting can delay earning money.
+
+119) “RoboRoute robots deliver faster routes”
+- Scope: Company | Target: RBRT
+- Expected: Up, Small | Impact: +0.03
+- Why: Faster delivery can win more customers.
+
+120) “RoboRoute battery issues cause returns”
+- Scope: Company | Target: RBRT
+- Expected: Down, Medium | Impact: -0.04
+- Why: Repairs cost money and hurt trust.
+
+121) “TrailTrack lands a big steady client”
+- Scope: Company | Target: TTLG
+- Expected: Up, Small | Impact: +0.03
+- Why: Steady clients can make sales predictable.
+
+122) “TrailTrack fuel surcharge upsets customers”
+- Scope: Company | Target: TTLG
+- Expected: Down, Small | Impact: -0.02
+- Why: Higher prices can push customers away.
+
+123) “BeaconHop wins a delivery-speed award”
+- Scope: Company | Target: BCHP
+- Expected: Up, Small | Impact: +0.03
+- Why: Awards can attract new customers.
+
+124) “BeaconHop warehouse mix-up causes delays”
+- Scope: Company | Target: BCHP
+- Expected: Down, Small | Impact: -0.03
+- Why: Mistakes can cost money and trust.
+
+125) “MediMints influencer shout-out boosts sales”
+- Scope: Company | Target: MDMT
+- Expected: Up, Small | Impact: +0.03
+- Why: More people hear about the product.
+
+126) “MediMints supply shortage of ingredients”
+- Scope: Company | Target: MDMT
+- Expected: Down, Small | Impact: -0.02
+- Why: If you can’t make it, you can’t sell it.
+
+127) “PulsePatch new model leaks online”
+- Scope: Company | Target: PLPT
+- Expected: Uncertain, Medium | Impact: +0.05 OR -0.05 (GM chooses which)
+- Why: Leaks can cause excitement or worry.
+
+128) “PulsePatch app update improves accuracy”
+- Scope: Company | Target: PLPT
+- Expected: Up, Medium | Impact: +0.04
+- Why: Better results can increase trust.
+
+129) “VitaNudge streak challenge goes viral”
+- Scope: Company | Target: VITN
+- Expected: Up, Small | Impact: +0.03
+- Why: Viral challenges can bring many new users.
+
+130) “VitaNudge notifications annoy users”
+- Scope: Company | Target: VITN
+- Expected: Down, Small | Impact: -0.02
+- Why: Annoyed users might uninstall.
+
+131) “AquaHarvest expands to a new greenhouse”
+- Scope: Company | Target: AQHV
+- Expected: Up, Medium | Impact: +0.04
+- Why: More farms can mean more food to sell.
+
+132) “AquaHarvest pump repair costs spike”
+- Scope: Company | Target: AQHV
+- Expected: Down, Small | Impact: -0.03
+- Why: Repairs reduce profit.
+
+133) “GrainGuard improves storage to reduce waste”
+- Scope: Company | Target: GGCP
+- Expected: Up, Small | Impact: +0.02
+- Why: Less waste can mean more profit.
+
+134) “GrainGuard delivery trucks run late”
+- Scope: Company | Target: GGCP
+- Expected: Down, Small | Impact: -0.02
+- Why: Late deliveries can lose customers.
+
+135) “SunnySide launches a new yogurt flavor”
+- Scope: Company | Target: SSDY
+- Expected: Up, Small | Impact: +0.02
+- Why: New products can bring new buyers.
+
+136) “SunnySide cold-storage issue spoils product”
+- Scope: Company | Target: SSDY
+- Expected: Down, Small | Impact: -0.03
+- Why: Spoiled product can cost money.
+
 ## 4) Next decisions
-- Event deck size: current deck is ~50. Expand further if you want even more variety.
+- Event deck size: current deck is ~136. Expand further if you want even more variety.
 - Do you want any camp-themed events (e.g., “rainy day affects deliveries”) to tie it into scout life?
 
-Update: deck is now ~106 (50 original + 50 added + 6 new-company cards), including a market crash + recovery mini-set.
+Update: deck is now ~136 (50 original + 50 added + 36 new-company cards), including a market crash + recovery mini-set.

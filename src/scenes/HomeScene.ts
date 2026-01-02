@@ -21,7 +21,7 @@ export class HomeScene extends Phaser.Scene {
 
     const events = getEvents();
     const headlines = events.slice(0, 5).map((e) => e.title);
-    const tickerMsg = `STOCK CAMP SIMULATOR   •   OFFLINE • GM-LED • PROJECTOR-FRIENDLY   •   TOP STORIES: ${headlines.join('   •   ')}`;
+    const tickerMsg = `CAMP STOCK SIMULATOR   •   TOP STORIES: ${headlines.join('   •   ')}`;
 
     const tickerText = this.add
       .text(width + 20, tickerH / 2, tickerMsg, {
@@ -98,18 +98,10 @@ export class HomeScene extends Phaser.Scene {
     heroG.fillCircle(chartPadX + chartW, chartPadY + (1 - series[series.length - 1]) * chartH, 4);
 
     this.add
-      .text(width / 2, heroTop + 76, 'Stock Camp Simulator', {
+      .text(width / 2, heroTop + 76, 'Camp Stock Simulator', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '48px',
         color: '#e8eefc'
-      })
-      .setOrigin(0.5);
-
-    this.add
-      .text(width / 2, heroTop + 126, 'Offline • GM-led • Projector-friendly', {
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '18px',
-        color: '#8ea3d8'
       })
       .setOrigin(0.5);
 
