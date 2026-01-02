@@ -187,8 +187,6 @@ export function newGame(startingCash = 1000): GameState {
     players: [],
     stocks,
     priceHistory: seedInitialPriceHistory(stocks, INITIAL_HISTORY_POINTS),
-    selectedEventId: undefined,
-    selectedEventAlt: false,
     lastEventId: undefined,
     lastRoundNews: [],
     currentNews: [],
@@ -267,14 +265,6 @@ export function addPlayer(state: GameState, name: string): GameState {
 
 export function removePlayer(state: GameState, playerId: string): GameState {
   return { ...state, players: state.players.filter((p) => p.id !== playerId) };
-}
-
-export function setSelectedEvent(state: GameState, eventId: string | undefined): GameState {
-  return { ...state, selectedEventId: eventId, selectedEventAlt: false };
-}
-
-export function toggleSelectedEventAlt(state: GameState): GameState {
-  return { ...state, selectedEventAlt: !state.selectedEventAlt };
 }
 
 export function getEvents(): MarketEvent[] {
@@ -417,8 +407,6 @@ export function resolveNextRound(state: GameState): { next: GameState; error?: s
     stocks: nextStocks,
     priceHistory: nextHistory,
     roundNetShares: {},
-    selectedEventId: undefined,
-    selectedEventAlt: false,
     lastEventId: lastEvent?.id,
     lastRoundNews: upcoming,
     currentNews: upcoming,
@@ -467,8 +455,6 @@ export function loadGame(): GameState | undefined {
       stocks: Array.isArray((parsed as any).stocks) ? (parsed as any).stocks : structuredClone(DEFAULT_STOCKS),
       roundNetShares: (parsed as any).roundNetShares ?? {},
       tradeHistory: (parsed as any).tradeHistory ?? [],
-      selectedEventId: (parsed as any).selectedEventId ?? undefined,
-      selectedEventAlt: (parsed as any).selectedEventAlt ?? false,
       lastEventId: (parsed as any).lastEventId ?? undefined,
       lastRoundNews,
       currentNews,

@@ -67,8 +67,6 @@ export type GameState = {
   players: Player[];
   stocks: Stock[];
   priceHistory?: Record<string, number[]>; // ticker -> list of past prices (by resolve order)
-  selectedEventId?: string;
-  selectedEventAlt?: boolean;
   lastEventId?: string;
   // Back-compat: previously used for "last applied" news
   lastRoundNews?: LastRoundNewsEntry[];

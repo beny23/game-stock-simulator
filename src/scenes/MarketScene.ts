@@ -346,39 +346,9 @@ export class MarketScene extends Phaser.Scene {
     const centerPanelH = usableH - (headerH + tabStripH);
     const contentMaxY = centerPanelH - 12;
 
-    const drawSparkline = (x: number, y: number, w: number, h: number, values: number[]) => {
-      const g = this.add.graphics().setDepth(10);
-      g.setPosition(x, y);
-      g.lineStyle(2, 0x8ea3d8, 1);
-      if (!values.length) return g;
-
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const span = max - min || 1;
-
-      for (let i = 0; i < values.length; i++) {
-        const t = values.length === 1 ? 0 : i / (values.length - 1);
-        const px = t * w;
-        const py = h - ((values[i] - min) / span) * h;
-        if (i === 0) g.beginPath().moveTo(px, py);
-        else g.lineTo(px, py);
-      }
-      g.strokePath();
-      return g;
-    };
-
     // Center: overview (news + history)
     const centerX = 0;
     const center = new Panel(this, centerX, headerH + tabStripH, centerW, centerPanelH);
-
-    const currentNews = (state.currentNews ?? []).map((n) => {
-      const e = eventsById.get(n.eventId);
-      return {
-        sectorName: n.sectorName,
-        title: e?.title ?? '—',
-        explanation: e?.explanation ?? ''
-      };
-    });
 
     const makeBulletins = () => {
       const idxHistory = state.priceHistory?.[MARKET_INDEX_KEY] ?? [];
@@ -997,19 +967,6 @@ export class MarketScene extends Phaser.Scene {
         })
         .setOrigin(0, 0);
       center.add(sectorNameText);
-
-      const listText = this.add
-        .text(spotlightX + 12, spotlightY + 64, '', {
-          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '13px',
-          color: '#8ea3d8',
-          lineSpacing: 5,
-          wordWrap: { width: 240 }
-        })
-        .setOrigin(0, 0);
-      // We keep a container for per-line colored tickers; the placeholder text
-      // object above is replaced below.
-      listText.destroy();
 
       const listContainer = this.add.container(spotlightX + 12, spotlightY + 64);
       center.add(listContainer);

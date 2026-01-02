@@ -59,12 +59,12 @@ Educational success > competitive win.
 (If you want ultra-minimal MVP, we can skip achievements.)
 
 ### 5.3 Core Loop
-1. GM reveals a short camp event/news update for the round
+1. **Upcoming headlines are shown on-screen** (one per sector)
 2. Scouts submit buy/sell requests to the GM (verbally or on paper)
-3. GM enters orders into the game
-4. GM resolves the round → prices update
-5. GM shares outcomes + “why it moved” explanation
-6. Next round
+3. GM enters trades into the game
+4. GM resolves the round → upcoming headlines are applied → prices update
+5. GM shares outcomes (e.g., top movers) + “why it moved” explanation
+6. Next round (new upcoming headlines appear)
 
 ## 6) Fictional Market Content
 ### 6.0 Sectors (for sector-wide events)
@@ -145,9 +145,10 @@ Every news card includes:
 - Scope tag: Company / Sector / Market
 - A short “Why this affects prices” explanation written for ages 10–14
 
-Event selection (camp default):
-- Each round, the **GM chooses** which event/news card to reveal.
-- Optional helper: a “Random card” button that suggests a card, but the GM can override.
+Event selection (current build):
+- Each round, the game **auto-generates a set of upcoming sector headlines** (shown on the ticker).
+- On **Next Round (Resolve)**, those headlines are applied to prices and a new set is generated.
+- (Future option) GM-selected or random-card selection UI.
 
 Deck size guidance:
 - For variety across a whole camp, aim for ~50 event cards total.
@@ -205,6 +206,9 @@ Camp default (no hard trade cap):
 - There is **no per-round limit** on number of trades.
 - Pacing and fairness are handled by the GM (recommended: a simple queue rule).
 
+Current build note:
+- The UI enters trades in **1-share steps** via `+` and `-` buttons. Repeat clicks for multiple shares.
+
 ### 7.4 Order Types
 MVP order type:
 - **Market order**: buy/sell at current price
@@ -234,19 +238,14 @@ Minimal required screens:
   - Difficulty preset
   - Start camp game (GM)
 3. **Market**
-   - Stock list with price, percent change
-   - Tap a stock → details panel
-  - GM order entry (buy/sell per player)
-  - Player portfolio summary (select a player)
-   - News panel (“Why prices moved”)
+   - **Overview tab:** ticker (upcoming headlines) + TV-style bulletins (includes Market Movers + CAMP Index)
+   - **Market Spotlight:** rotates through CAMP Index and sectors with price history charts
+   - **Player tabs:** market board with `+`/`-` 1-share trade entry + confirmation
+   - Player panels include **Recent Trades** and a **Net Worth** tracker (cash, stocks, total)
+   - Bottom console shows activity log (newest at top) with scrollback
    - **Advance controls (GM):**
-     - Open/Close trading
      - Next Round (resolve)
      - End Game
-
-Event controls (GM):
-- Choose next event card (before resolving the round)
-- Optional: “Random event”
 4. **Results**
    - Final leaderboard
    - Reflection prompts (1–3 questions)
@@ -286,9 +285,9 @@ Optional fallback:
 - Paper order slips (only if verbal gets too chaotic)
 
 The game UI should make it fast for the GM to:
-- Pick a player
-- Pick a stock
-- Enter shares and side (buy/sell)
+- Pick a player tab
+- Pick a stock tile
+- Click `+` (buy 1) or `-` (sell 1), repeating for multiple shares
 - Confirm (with validation)
 
 Given “no undos,” the UI should also:
@@ -298,7 +297,7 @@ Given “no undos,” the UI should also:
 
 Recommended verbal round routine (12 players + projector):
 - GM shows the market board and reads the round’s headline event.
-- GM opens trading for the round.
+- Trading is always open (no separate open/close step).
 - Scouts line up (or raise hands). One at a time, a scout places **one trade** (fast), then goes to the back of the line if they want to trade again.
 - GM aims for fairness by cycling through the line so no one dominates time.
 - For each trade, GM repeats back: “Player X: BUY/SELL N of TICKER at PRICE — confirm?” then submits.
@@ -315,7 +314,7 @@ Round-end rule (your camp setup):
 ### 9.3 Saving & Restoring
 Must support continuing across multiple days of camp:
 - Save game locally in browser storage
-- Export/import save file (recommended) for safety (USB/AirDrop)
+- (Future) Export/import save file for safety (USB/AirDrop)
 
 Because the number of rounds is open-ended, saves must include current round number and full price/portfolio state.
 

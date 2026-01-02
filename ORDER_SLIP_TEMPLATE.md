@@ -27,3 +27,6 @@ GM check (leave blank for scouts):
 Tips for scouts:
 - Diversify: owning multiple stocks can reduce risk.
 - News can move prices fast—don’t panic.
+
+Note for the GM (current app UI):
+- Trades are entered in **1-share steps** via `+` (buy 1) and `-` (sell 1). If a slip says “BUY 3”, click `+` three times.
