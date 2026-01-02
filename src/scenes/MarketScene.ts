@@ -74,6 +74,14 @@ export class MarketScene extends Phaser.Scene {
     const makeId = () => `a_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
     const activityLog = [...(state.activityLog ?? [])];
 
+    const tagForMessage = (actor: string, message: string): string => {
+      if (message.startsWith('ERROR:')) return 'ERROR';
+      if (/^(BUY|SELL)\b/.test(message)) return 'TRADE';
+      if (actor === 'GM' && /^Resolved round\b/.test(message)) return 'ROUND';
+      if (actor === 'GM') return 'GM';
+      return 'INFO';
+    };
+
     // Console scroll: 0 means show most recent entries.
     let consoleScroll = 0;
     const consoleLineH = 18;
@@ -92,7 +100,10 @@ export class MarketScene extends Phaser.Scene {
       const ordered = activityLog
         .slice()
         .reverse()
-        .map((e) => `R${e.round}  ${e.actor}: ${e.message}`);
+        .map((e) => {
+          const tag = tagForMessage(e.actor, e.message);
+          return `R${e.round} [${tag}] ${e.actor}: ${e.message}`;
+        });
 
       const visible = ordered.slice(consoleScroll, consoleScroll + maxVisibleRows);
       consoleText.setText(visible.join('\n'));
@@ -165,7 +176,30 @@ export class MarketScene extends Phaser.Scene {
 
     const eventsById = new Map(events.map((e) => [e.id, e] as const));
 
-    // Ticker shows UPCOMING headlines only (no explanations)
+    // Price helpers (used for % change badges, ticker tape, etc.)
+    const priceHistory = state.priceHistory ?? {};
+    const lastPriceFor = (ticker: string, fallback: number): number => {
+      const arr = priceHistory[ticker];
+      return arr?.length ? arr[arr.length - 1] : fallback;
+    };
+    const prevPriceFor = (ticker: string, fallback: number): number => {
+      const arr = priceHistory[ticker];
+      if (!arr?.length) return fallback;
+      return arr.length > 1 ? arr[arr.length - 2] : arr[arr.length - 1];
+    };
+    const changeFor = (ticker: string, fallback: number) => {
+      const now = lastPriceFor(ticker, fallback);
+      const prev = prevPriceFor(ticker, fallback);
+      const delta = now - prev;
+      const pct = prev ? (delta / prev) * 100 : 0;
+      return { now, prev, delta, pct };
+    };
+    const arrowForDelta = (delta: number): string => (delta > 0 ? '▲' : delta < 0 ? '▼' : '•');
+    const colorForDelta = (delta: number): string => (delta > 0 ? '#c7f9cc' : delta < 0 ? '#ffd6a5' : '#8ea3d8');
+    const fmtPct = (pct: number): string => `${pct >= 0 ? '+' : ''}${Math.round(pct)}%`;
+    const fmtQuoteTail = (delta: number, pct: number): string => `${arrowForDelta(delta)}${Math.abs(Math.round(delta))} (${fmtPct(pct)})`;
+
+    // Ticker: market tape + upcoming headlines
     const upcomingHeadlines = (state.upcomingNews ?? [])
       .map((n) => {
         const title = eventsById.get(n.eventId)?.title ?? '—';
@@ -173,9 +207,18 @@ export class MarketScene extends Phaser.Scene {
       })
       .filter((s) => s.trim() !== '');
 
-    const newsStrip = upcomingHeadlines.length ? upcomingHeadlines.join('   •   ') : lastEvent?.title ?? 'No news yet';
+    const idxChg = changeFor(MARKET_INDEX_KEY, 1000);
+    const idxQuote = `CAMP ${idxChg.now} ${fmtQuoteTail(idxChg.delta, idxChg.pct)}`;
+    const stockQuotes = state.stocks.map((s) => {
+      const chg = changeFor(s.ticker, s.price);
+      return `${s.ticker} ${chg.now} ${fmtQuoteTail(chg.delta, chg.pct)}`;
+    });
 
-    const tickerMsg = `BREAKING: ${newsStrip}   •   Round ${state.round}`;
+    const upcomingStrip = upcomingHeadlines.length
+      ? `UPCOMING: ${upcomingHeadlines.join('  |  ')}`
+      : lastEvent?.title ?? 'No news yet';
+
+    const tickerMsg = `${idxQuote}   •   ${stockQuotes.join('   •   ')}   •   ${upcomingStrip}   •   Round ${state.round}`;
     const tickerText = this.add
       .text(width + 20, tickerH / 2, tickerMsg, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
@@ -202,6 +245,61 @@ export class MarketScene extends Phaser.Scene {
         color: '#e8eefc'
       })
       .setOrigin(0, 0);
+
+    // Header mini widget: CAMP Index + sparkline
+    {
+      const widgetW = 240;
+      const widgetH = 46;
+      const widgetX = Math.max(24, width - 200 - widgetW);
+      const widgetY = 28;
+
+      const bg = this.add
+        .rectangle(widgetX, widgetY, widgetW, widgetH, 0x0f1730, 0.9)
+        .setOrigin(0, 0)
+        .setStrokeStyle(2, 0x334166, 1);
+
+      const text = this.add
+        .text(widgetX + 10, widgetY + 9, `CAMP ${idxChg.now} ${fmtQuoteTail(idxChg.delta, idxChg.pct)}`, {
+          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+          fontSize: '14px',
+          color: colorForDelta(idxChg.delta)
+        })
+        .setOrigin(0, 0);
+
+      const series = (priceHistory[MARKET_INDEX_KEY] ?? []).slice(-30);
+      const sparkW = 78;
+      const sparkH = 26;
+      const sparkX = widgetX + widgetW - sparkW - 10;
+      const sparkY = widgetY + 10;
+
+      const g = this.add.graphics();
+      g.lineStyle(2, 0x8ea3d8, 1);
+      g.setPosition(sparkX, sparkY);
+      if (series.length) {
+        const min = Math.min(...series);
+        const max = Math.max(...series);
+        const span = max - min || 1;
+        for (let i = 0; i < series.length; i++) {
+          const t = series.length === 1 ? 0 : i / (series.length - 1);
+          const px = t * sparkW;
+          const py = sparkH - ((series[i] - min) / span) * sparkH;
+          if (i === 0) g.beginPath().moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.strokePath();
+
+        // Current marker
+        const last = series[series.length - 1];
+        const markerY = sparkH - ((last - min) / span) * sparkH;
+        g.fillStyle(0xffd6a5, 1);
+        g.fillCircle(sparkW, markerY, 3);
+      }
+
+      // Keep widget above panel chrome.
+      bg.setDepth(205);
+      text.setDepth(206);
+      g.setDepth(206);
+    }
 
     // Tab state
     if (this.viewMode === 'player' && state.players.length === 0) {
@@ -660,24 +758,47 @@ export class MarketScene extends Phaser.Scene {
               .setStrokeStyle(2, 0x334166, 1);
             center.add(tile);
 
-            const label = this.add
-              .text(x + 10, tileY + 6, `${s.ticker}  ${s.name}`, {
+            const chg = changeFor(s.ticker, s.price);
+
+            const btnX = x + colW - 18;
+
+            const tickerText = this.add
+              .text(x + 10, tileY + 6, s.ticker, {
                 fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-                fontSize: '12px',
+                fontSize: '14px',
                 color: '#e8eefc',
-                wordWrap: { width: colW - 52 }
+                wordWrap: { width: colW - 60 }
               })
               .setOrigin(0, 0);
-            center.add(label);
+            center.add(tickerText);
+
+            const nameText = this.add
+              .text(x + 10, tileY + 24, s.name, {
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+                fontSize: '11px',
+                color: '#8ea3d8',
+                wordWrap: { width: colW - 60 }
+              })
+              .setOrigin(0, 0);
+            center.add(nameText);
 
             const price = this.add
-              .text(x + 10, tileY + 34, `${s.price}`, {
+              .text(x + 10, tileY + 40, `${s.price}`, {
                 fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-                fontSize: '20px',
-                color: '#c7f9cc'
+                fontSize: '18px',
+                color: colorForDelta(chg.delta)
               })
               .setOrigin(0, 0);
             center.add(price);
+
+            const changeText = this.add
+              .text(btnX - 34, tileY + 42, `${fmtQuoteTail(chg.delta, chg.pct)}`, {
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+                fontSize: '12px',
+                color: colorForDelta(chg.delta)
+              })
+              .setOrigin(1, 0);
+            center.add(changeText);
 
             const ownedText = this.add
               .text(0, tileY + 38, `x${owned}`, {
@@ -687,8 +808,6 @@ export class MarketScene extends Phaser.Scene {
               })
               .setOrigin(1, 0);
             center.add(ownedText);
-
-            const btnX = x + colW - 18;
             // Keep the label right-aligned, but ensure it doesn't sit under the +/- buttons.
             // Buttons are 30px wide and centered at btnX, so their left edge is ~btnX-15.
             ownedText.setX(btnX - 22);
@@ -942,6 +1061,8 @@ export class MarketScene extends Phaser.Scene {
       const spotlightW = centerW - 32;
       const spotlightH = Math.max(160, centerPanelH - spotlightY - 18);
 
+      const SPOT_HISTORY = 20;
+
       const history = state.priceHistory ?? {};
 
       const spotBg = this.add
@@ -980,10 +1101,98 @@ export class MarketScene extends Phaser.Scene {
         .setOrigin(0, 0);
       center.add(graphTitle);
 
+      // Reserve a right-side column for the in-depth news panel.
+      const rightPad = 12;
+      const newsW = Math.min(340, Math.max(240, Math.floor(spotlightW * 0.28)));
+      const newsX = spotlightX + spotlightW - rightPad - newsW;
+      const newsY = spotlightY + 64;
+      const newsH = Math.max(80, spotlightH - (newsY - spotlightY) - 12);
+
       const graphX = spotlightX + 270;
       const graphY = spotlightY + 90;
-      const graphW = spotlightW - 282;
+      const graphW = Math.max(160, newsX - 12 - graphX);
       const graphH = Math.max(70, spotlightH - 110);
+
+      const newsBg = this.add
+        .rectangle(newsX, newsY, newsW, newsH, 0x111a33, 0.35)
+        .setOrigin(0, 0)
+        .setStrokeStyle(2, 0x334166, 1);
+      center.add(newsBg);
+
+      const newsTitle = this.add
+        .text(newsX + 10, newsY + 8, 'Sector News', {
+          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+          fontSize: '14px',
+          color: '#ffd6a5'
+        })
+        .setOrigin(0, 0);
+      center.add(newsTitle);
+
+      const newsBody = this.add
+        .text(newsX + 10, newsY + 30, '—', {
+          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+          fontSize: '13px',
+          color: '#b9c7ee',
+          lineSpacing: 6,
+          wordWrap: { width: newsW - 20 }
+        })
+        .setOrigin(0, 0);
+      center.add(newsBody);
+
+      const wrapText = (s: string, maxChars: number) => {
+        if (s.length <= maxChars) return s;
+        return `${s.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+      };
+
+      const setSpotlightNews = (sectorId: string | undefined) => {
+        if (!sectorId) {
+          newsTitle.setText('Index Notes');
+          newsBody.setText(
+            'CAMP Index tracks the overall market level (average prices).\nWatch it rise/fall as sectors react to news.'
+          );
+          return;
+        }
+
+        const sector = SECTORS.find((s) => s.id === sectorId);
+        newsTitle.setText(`${sector?.name ?? 'Sector'} News`);
+
+        const applied = (state.currentNews ?? [])
+          .filter((n) => n.sectorId === sectorId)
+          .slice(-1)
+          .map((n) => {
+            const e = eventsById.get(n.eventId);
+            return {
+              header: `Applied (this round): ${e?.title ?? '—'}`,
+              body: e?.explanation ?? '—'
+            };
+          });
+
+        const upcoming = (state.upcomingNews ?? [])
+          .filter((n) => n.sectorId === sectorId)
+          .slice(-1)
+          .map((n) => {
+            const e = eventsById.get(n.eventId);
+            return {
+              header: `Upcoming (next round): ${e?.title ?? '—'}`,
+              body: e?.explanation ?? 'This headline is expected to affect prices next round.'
+            };
+          });
+
+        const parts = [...applied, ...upcoming];
+        if (!parts.length) {
+          newsBody.setText('No sector-specific news right now.');
+          return;
+        }
+
+        // Keep it readable inside the panel.
+        const lines: string[] = [];
+        for (const p of parts) {
+          lines.push(p.header);
+          lines.push(wrapText(p.body.replace(/\s+/g, ' ').trim(), 160));
+          lines.push('');
+        }
+        newsBody.setText(lines.join('\n').trim());
+      };
 
       const graphBorder = this.add
         .rectangle(graphX, graphY, graphW, graphH, 0x111a33, 0.35)
@@ -1031,22 +1240,21 @@ export class MarketScene extends Phaser.Scene {
         listContainer.removeAll(true);
 
         if (item.kind === 'index') {
-          const idxSeries = (history[MARKET_INDEX_KEY] ?? []).slice(-40);
+          const idxSeries = (history[MARKET_INDEX_KEY] ?? []).slice(-SPOT_HISTORY);
           const idxNow = idxSeries.length ? idxSeries[idxSeries.length - 1] : undefined;
-          const idxPrev = idxSeries.length > 1 ? idxSeries[idxSeries.length - 2] : undefined;
-          const idxDelta = idxNow != null && idxPrev != null ? idxNow - idxPrev : undefined;
-          const deltaStr = idxDelta == null ? '' : ` (${idxDelta >= 0 ? '+' : ''}${idxDelta})`;
+          const idxInfo = changeFor(MARKET_INDEX_KEY, idxNow ?? 1000);
 
           sectorNameText.setText('CAMP Index');
           const idxLine = this.add
-            .text(0, 0, idxNow == null ? '—' : `Index: ${idxNow}${deltaStr}`, {
+            .text(0, 0, idxNow == null ? '—' : `Index: ${idxInfo.now} ${fmtQuoteTail(idxInfo.delta, idxInfo.pct)}`, {
               fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
               fontSize: '13px',
-              color: '#8ea3d8'
+              color: colorForDelta(idxInfo.delta)
             })
             .setOrigin(0, 0);
           listContainer.add(idxLine);
-          graphTitle.setText('Graph: CAMP Index (last 40)');
+          graphTitle.setText(`Graph: CAMP Index (last ${SPOT_HISTORY})`);
+          setSpotlightNews(undefined);
 
           drawGraph(
             [{ label: 'INDEX', values: idxSeries.length ? idxSeries : [idxNow ?? 0] }],
@@ -1059,6 +1267,7 @@ export class MarketScene extends Phaser.Scene {
         const sector = SECTORS.find((s) => s.id === item.sectorId) ?? SECTORS[0];
         const stocks = state.stocks.filter((s) => s.sector === sector.id);
         sectorNameText.setText(sector.name);
+        setSpotlightNews(sector.id);
 
         const shown = stocks.slice(0, 5);
         if (!shown.length) {
@@ -1075,6 +1284,7 @@ export class MarketScene extends Phaser.Scene {
           shown.forEach((s, i) => {
             const y = i * lineH;
             const color = lineColors[i % lineColors.length];
+            const chg = changeFor(s.ticker, s.price);
 
             const tickerText = this.add
               .text(0, y, s.ticker, {
@@ -1086,10 +1296,10 @@ export class MarketScene extends Phaser.Scene {
             listContainer.add(tickerText);
 
             const priceText = this.add
-              .text(tickerText.width + 10, y, `${s.price}`, {
+              .text(tickerText.width + 10, y, `${s.price} ${fmtQuoteTail(chg.delta, chg.pct)}`, {
                 fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
                 fontSize: '13px',
-                color: '#8ea3d8'
+                color: colorForDelta(chg.delta)
               })
               .setOrigin(0, 0);
             listContainer.add(priceText);
@@ -1102,10 +1312,10 @@ export class MarketScene extends Phaser.Scene {
           return;
         }
 
-        graphTitle.setText(`Graph: ${sector.name} (all stocks • last 40)`);
+        graphTitle.setText(`Graph: ${sector.name} (all stocks • last ${SPOT_HISTORY})`);
         const series = stocks.map((st) => ({
           label: st.ticker,
-          values: (history[st.ticker] ?? [st.price]).slice(-40)
+          values: (history[st.ticker] ?? [st.price]).slice(-SPOT_HISTORY)
         }));
         drawGraph(series, Math.max(10, graphW - 20), Math.max(10, graphH - 20));
       };
