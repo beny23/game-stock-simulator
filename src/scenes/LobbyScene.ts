@@ -83,9 +83,9 @@ export class LobbyScene extends Phaser.Scene {
     new TextButton(this, width - 220, height - 80, {
       width: 360,
       height: 64,
-      label: state.players.length >= 2 ? 'Start Market' : 'Start Market (need 2+)',
+      label: state.players.length >= 1 ? 'Start Market' : 'Start Market (add a player)',
       onClick: () => {
-        if (state.players.length < 2) return;
+        if (state.players.length < 1) return;
         this.scene.start('market');
       }
     });
