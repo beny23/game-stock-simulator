@@ -4,19 +4,133 @@ import { GameState, LastRoundNewsEntry, MarketEvent, OrderSide, Player, Stock, T
 
 const STORAGE_KEY = 'stock-camp-sim:v1';
 
+const INITIAL_HISTORY_POINTS = 40;
+const MAX_HISTORY_POINTS = 60;
+
 function makeId(prefix: string): string {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function randBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function noiseForVolatility(vol: Stock['volatility']): number {
+  switch (vol) {
+    case 'LOW':
+      return 0.005;
+    case 'MED':
+      return 0.01;
+    case 'HIGH':
+      return 0.02;
+  }
+}
+
+function makeSectorDrifts(steps: number): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
+  for (const s of SECTORS) {
+    const base = randBetween(-0.0015, 0.0015);
+    let trend = base;
+    const arr: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      // gentle, correlated drift with some randomness
+      const drift = clamp(trend + randBetween(-0.002, 0.002), -0.01, 0.01);
+      arr.push(drift);
+      trend = clamp(trend * 0.85 + base * 0.15 + randBetween(-0.0006, 0.0006), -0.006, 0.006);
+    }
+    out[s.id] = arr;
+  }
+  return out;
+}
+
+function generateBackfillPrices(anchorPrice: number, stock: Stock, count: number, sectorDrifts?: number[]): number[] {
+  if (count <= 0) return [];
+  const drift = sectorDrifts ?? new Array(count).fill(0).map(() => randBetween(-0.003, 0.003));
+  const noiseRange = noiseForVolatility(stock.volatility);
+
+  const prevs: number[] = [];
+  let next = Math.max(10, Math.round(anchorPrice));
+  for (let i = 0; i < count; i++) {
+    const pct = clamp(drift[i] + randBetween(-noiseRange, noiseRange), -0.06, 0.06);
+    const denom = Math.max(0.5, 1 + pct);
+    const prev = Math.max(10, Math.round(next / denom));
+    prevs.push(prev);
+    next = prev;
+  }
+
+  // We generated backwards: [one-step-back, two-steps-back, ...]. Reverse to get oldest -> newest.
+  prevs.reverse();
+  return prevs;
+}
+
+function seedInitialPriceHistory(stocks: Stock[], points: number): Record<string, number[]> {
+  const clampedPoints = Math.max(2, Math.min(MAX_HISTORY_POINTS, Math.round(points)));
+  const steps = clampedPoints - 1;
+  const sectorDrifts = makeSectorDrifts(steps);
+
+  const out: Record<string, number[]> = {};
+  for (const stock of stocks) {
+    const values = new Array<number>(clampedPoints);
+    values[clampedPoints - 1] = Math.max(10, Math.round(stock.price));
+    const drift = sectorDrifts[stock.sector] ?? new Array(steps).fill(0);
+    const noiseRange = noiseForVolatility(stock.volatility);
+
+    for (let i = clampedPoints - 2; i >= 0; i--) {
+      const pct = clamp(drift[i] + randBetween(-noiseRange, noiseRange), -0.06, 0.06);
+      const denom = Math.max(0.5, 1 + pct);
+      values[i] = Math.max(10, Math.round(values[i + 1] / denom));
+    }
+
+    out[stock.ticker] = values;
+  }
+  return out;
+}
+
+function ensurePriceHistory(state: GameState, minPoints: number): GameState {
+  const clampedMin = Math.max(2, Math.min(MAX_HISTORY_POINTS, Math.round(minPoints)));
+  const nextHistory: Record<string, number[]> = { ...(state.priceHistory ?? {}) };
+
+  // Use consistent sector drift when backfilling across tickers.
+  const sectorDrifts = makeSectorDrifts(clampedMin);
+
+  for (const stock of state.stocks) {
+    const existing = Array.isArray(nextHistory[stock.ticker]) ? [...nextHistory[stock.ticker]] : [];
+
+    if (!existing.length) existing.push(Math.max(10, Math.round(stock.price)));
+
+    // If last point doesn't match current, append current so graphs match the board.
+    const current = Math.max(10, Math.round(stock.price));
+    if (existing[existing.length - 1] !== current) existing.push(current);
+
+    if (existing.length < clampedMin) {
+      const need = clampedMin - existing.length;
+      const drift = sectorDrifts[stock.sector] ?? undefined;
+      const backfill = generateBackfillPrices(existing[0], stock, need, drift);
+      nextHistory[stock.ticker] = [...backfill, ...existing];
+    } else {
+      nextHistory[stock.ticker] = existing;
+    }
+
+    // Keep bounded.
+    while (nextHistory[stock.ticker].length > MAX_HISTORY_POINTS) nextHistory[stock.ticker].shift();
+  }
+
+  return { ...state, priceHistory: nextHistory };
+}
+
 export function newGame(startingCash = 1000): GameState {
+  const stocks = structuredClone(DEFAULT_STOCKS);
   const tempState: GameState = {
     version: 1,
     round: 1,
-    tradingOpen: false,
     startingCash,
     players: [],
-    stocks: structuredClone(DEFAULT_STOCKS),
-    priceHistory: Object.fromEntries(structuredClone(DEFAULT_STOCKS).map((s) => [s.ticker, [s.price]])),
+    stocks,
+    priceHistory: seedInitialPriceHistory(stocks, INITIAL_HISTORY_POINTS),
     selectedEventId: undefined,
     selectedEventAlt: false,
     lastEventId: undefined,
@@ -99,10 +213,6 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   return { ...state, players: state.players.filter((p) => p.id !== playerId) };
 }
 
-export function setTradingOpen(state: GameState, open: boolean): GameState {
-  return { ...state, tradingOpen: open };
-}
-
 export function setSelectedEvent(state: GameState, eventId: string | undefined): GameState {
   return { ...state, selectedEventId: eventId, selectedEventAlt: false };
 }
@@ -130,7 +240,6 @@ export function placeOrder(
   side: OrderSide,
   shares: number
 ): { next: GameState; error?: string } {
-  if (!state.tradingOpen) return { next: state, error: 'Trading is closed.' };
   if (!Number.isFinite(shares) || shares <= 0 || !Number.isInteger(shares)) {
     return { next: state, error: 'Shares must be a whole number > 0.' };
   }
@@ -176,21 +285,6 @@ export function placeOrder(
   const nextNet = { ...state.roundNetShares, [ticker]: (state.roundNetShares[ticker] ?? 0) - shares };
   const nextHistory = appendTradeHistory(state, nextPlayer, ticker, side, shares, stock.price);
   return { next: { ...state, players: nextPlayers, roundNetShares: nextNet, tradeHistory: nextHistory } };
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function noiseForVolatility(vol: Stock['volatility']): number {
-  switch (vol) {
-    case 'LOW':
-      return 0.005;
-    case 'MED':
-      return 0.01;
-    case 'HIGH':
-      return 0.02;
-  }
 }
 
 function isCrashEvent(event: MarketEvent): boolean {
@@ -249,14 +343,13 @@ export function resolveNextRound(state: GameState): { next: GameState; error?: s
     const arr = nextHistory[s.ticker] ? [...nextHistory[s.ticker]] : [];
     arr.push(s.price);
     // Keep history bounded so saves stay small.
-    while (arr.length > 60) arr.shift();
+    while (arr.length > MAX_HISTORY_POINTS) arr.shift();
     nextHistory[s.ticker] = arr;
   }
 
   const next: GameState = {
     ...state,
     round: state.round + 1,
-    tradingOpen: false,
     stocks: nextStocks,
     priceHistory: nextHistory,
     roundNetShares: {},
@@ -303,16 +396,22 @@ export function loadGame(): GameState | undefined {
       : [];
 
     const base: GameState = {
-      ...parsed,
-      roundNetShares: parsed.roundNetShares ?? {},
+      version: 1,
+      round: typeof (parsed as any).round === 'number' ? (parsed as any).round : 1,
+      startingCash: typeof (parsed as any).startingCash === 'number' ? (parsed as any).startingCash : 1000,
+      players: Array.isArray((parsed as any).players) ? (parsed as any).players : [],
+      stocks: Array.isArray((parsed as any).stocks) ? (parsed as any).stocks : structuredClone(DEFAULT_STOCKS),
+      roundNetShares: (parsed as any).roundNetShares ?? {},
       tradeHistory: (parsed as any).tradeHistory ?? [],
+      selectedEventId: (parsed as any).selectedEventId ?? undefined,
+      selectedEventAlt: (parsed as any).selectedEventAlt ?? false,
       lastEventId: (parsed as any).lastEventId ?? undefined,
       lastRoundNews,
       currentNews,
       upcomingNews,
       activityLog: (parsed as any).activityLog ?? [],
       priceHistory:
-        (parsed as any).priceHistory ?? Object.fromEntries((parsed.stocks ?? []).map((s: any) => [s.ticker, [s.price]]))
+        (parsed as any).priceHistory ?? Object.fromEntries(((parsed as any).stocks ?? []).map((s: any) => [s.ticker, [s.price]]))
     };
 
     // Ensure we always have upcoming headlines for the ticker.
@@ -320,7 +419,7 @@ export function loadGame(): GameState | undefined {
       base.upcomingNews = pickSectorNews(base, getEvents());
     }
 
-    return base;
+    return ensurePriceHistory(base, INITIAL_HISTORY_POINTS);
   } catch {
     return undefined;
   }

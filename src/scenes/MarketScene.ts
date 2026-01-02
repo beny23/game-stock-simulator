@@ -4,10 +4,8 @@ import {
   getPlayer,
   loadGame,
   placeOrder,
-  portfolioValue,
   resolveNextRound,
   saveGame,
-  setTradingOpen,
   getEvents
 } from '../state/store';
 import { OrderSide } from '../state/types';
@@ -46,6 +44,7 @@ export class MarketScene extends Phaser.Scene {
     // Bottom console
     const consoleH = 110;
     const consoleY = height - consoleH;
+    const usableH = height - consoleH;
     const consoleBg = this.add
       .rectangle(0, consoleY, width, consoleH, 0x0f1730, 1)
       .setOrigin(0, 0)
@@ -117,7 +116,7 @@ export class MarketScene extends Phaser.Scene {
 
     const newsStrip = upcomingHeadlines.length ? upcomingHeadlines.join('   •   ') : lastEvent?.title ?? 'No news yet';
 
-    const tickerMsg = `BREAKING: ${newsStrip}   •   Round ${state.round}   •   Trading: ${state.tradingOpen ? 'OPEN' : 'CLOSED'}`;
+    const tickerMsg = `BREAKING: ${newsStrip}   •   Round ${state.round}`;
     const tickerText = this.add
       .text(width + 20, tickerH / 2, tickerMsg, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
@@ -145,14 +144,6 @@ export class MarketScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
-    this.add
-      .text(24, 58, state.tradingOpen ? 'Trading: OPEN' : 'Trading: CLOSED', {
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '16px',
-        color: state.tradingOpen ? '#c7f9cc' : '#ffd6a5'
-      })
-      .setOrigin(0, 0);
-
     // Tab state
     if (this.viewMode === 'player' && state.players.length === 0) {
       this.viewMode = 'overview';
@@ -167,11 +158,6 @@ export class MarketScene extends Phaser.Scene {
       const shares = 1;
       const pid = playerIdOverride ?? this.selectedPlayerId;
       if (!pid) return;
-
-      if (!state.tradingOpen) {
-        showError('GM', 'Trading is closed.');
-        return;
-      }
 
       const player = state.players.find((p) => p.id === pid);
       const stock = state.stocks.find((s) => s.ticker === ticker);
@@ -298,7 +284,7 @@ export class MarketScene extends Phaser.Scene {
       });
     });
 
-    const centerPanelH = height - (headerH + tabStripH);
+    const centerPanelH = usableH - (headerH + tabStripH);
     const contentMaxY = centerPanelH - 12;
 
     const drawSparkline = (x: number, y: number, w: number, h: number, values: number[]) => {
@@ -356,7 +342,7 @@ export class MarketScene extends Phaser.Scene {
 
       const summary = {
         kind: 'Summary',
-        header: `Market Summary • Round ${state.round} • Trading: ${state.tradingOpen ? 'OPEN' : 'CLOSED'}`,
+        header: `Market Summary • Round ${state.round}`,
         body:
           'Tip: Buy before positive news applies. Sell before negative news applies. Diversify across sectors to reduce risk.'
       };
@@ -557,7 +543,10 @@ export class MarketScene extends Phaser.Scene {
         const innerX = 16;
         const innerY = boardTopY + 34;
         const innerW = centerW - 32;
-        const innerH = Math.max(200, contentMaxY - innerY);
+        const availableH = Math.max(220, contentMaxY - innerY);
+        const historyPanelH = Math.min(160, Math.max(110, Math.floor(availableH * 0.32)));
+        const historyGap = 12;
+        const innerH = Math.max(200, availableH - historyPanelH - historyGap);
 
         const colGap = 12;
         const colW = Math.floor((innerW - colGap * 4) / 5);
@@ -638,6 +627,43 @@ export class MarketScene extends Phaser.Scene {
             center.add(sellBtn);
           });
         });
+
+        // Recent trade history (inside player tab)
+        const historyX = innerX;
+        const historyY = innerY + innerH + historyGap;
+        const historyW = innerW;
+
+        const histBg = this.add
+          .rectangle(historyX, historyY, historyW, historyPanelH, 0x0f1730, 0.75)
+          .setOrigin(0, 0)
+          .setStrokeStyle(2, 0x334166, 1);
+        center.add(histBg);
+
+        const histTitle = this.add
+          .text(historyX + 12, historyY + 10, 'Recent Trades', {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '14px',
+            color: '#ffd6a5'
+          })
+          .setOrigin(0, 0);
+        center.add(histTitle);
+
+        const recent = (state.tradeHistory ?? [])
+          .filter((t) => t.playerId === p.id)
+          .slice(-8)
+          .reverse()
+          .map((t) => `R${t.round}  ${t.side}  ${t.ticker}  x${t.shares}  @ ${t.price}`);
+
+        const histBody = this.add
+          .text(historyX + 12, historyY + 34, recent.length ? recent.join('\n') : '—', {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '13px',
+            color: '#e8eefc',
+            lineSpacing: 5,
+            wordWrap: { width: historyW - 24 }
+          })
+          .setOrigin(0, 0);
+        center.add(histBody);
       }
     }
 
@@ -779,21 +805,11 @@ export class MarketScene extends Phaser.Scene {
 
       const sectorTimer = this.time.addEvent({ delay: 5000, loop: true, callback: transitionToNextSector });
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sectorTimer.remove(false));
-    } else {
-      center.add(
-        this.add
-          .text(16, 168, 'Click a player to trade', {
-            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-            fontSize: '16px',
-            color: '#8ea3d8'
-          })
-          .setOrigin(0, 0)
-      );
     }
 
     // Right panel: GM controls
     const rightX = centerW;
-    const right = new Panel(this, rightX, headerH, rightW, height - headerH);
+    const right = new Panel(this, rightX, headerH, rightW, usableH - headerH);
 
     const rightInnerX = rightX + 20;
     const rightInnerW = rightW - 40;
@@ -827,135 +843,9 @@ export class MarketScene extends Phaser.Scene {
         .setOrigin(0, 0)
     );
 
-    const openPortfolioHistory = () => {
-      if (this.confirmOpen) return;
-      if (!player) return;
-
-      this.confirmOpen = true;
-
-      const blocker = this.add
-        .rectangle(0, 0, width, height, 0x000000, 0.55)
-        .setOrigin(0, 0)
-        .setInteractive();
-
-      const panelW = Math.min(760, width - 80);
-      const panelH = Math.min(520, height - 80);
-      const panelX = width / 2;
-      const panelY = height / 2;
-
-      const panelBg = this.add
-        .rectangle(panelX, panelY, panelW, panelH, 0x0f1730, 1)
-        .setStrokeStyle(2, 0x334166, 1)
-        .setOrigin(0.5);
-
-      const title = this.add
-        .text(panelX - panelW / 2 + 18, panelY - panelH / 2 + 16, `${player.name} — Portfolio & History`, {
-          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '20px',
-          color: '#e8eefc'
-        })
-        .setOrigin(0, 0);
-
-      const byTicker = new Map(state.stocks.map((s) => [s.ticker, s]));
-      const total = portfolioValue(state, player);
-
-      const heldSectors = new Set(
-        Object.keys(player.holdings)
-          .map((t) => byTicker.get(t)?.sector)
-          .filter((s): s is NonNullable<typeof s> => !!s)
-      );
-
-      const sectorNews = (state.currentNews ?? state.lastRoundNews ?? [])
-        .filter((n) => heldSectors.has(n.sectorId))
-        .map((n) => {
-          const ev = events.find((e) => e.id === n.eventId);
-          return `${n.sectorName}: ${ev?.title ?? '—'}`;
-        });
-
-      const holdingsLines = Object.entries(player.holdings)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([ticker, shares]) => {
-          const stock = byTicker.get(ticker);
-          const price = stock?.price ?? 0;
-          const val = price * shares;
-          return `${ticker}  x${shares}   @ ${price}   = ${val}`;
-        });
-
-      const holdingsText = holdingsLines.length
-        ? holdingsLines.join('\n')
-        : '—';
-
-      const recent = (state.tradeHistory ?? [])
-        .filter((t) => t.playerId === player.id)
-        .slice(-12)
-        .reverse()
-        .map((t) => `R${t.round}  ${t.side}  ${t.ticker}  x${t.shares}  @ ${t.price}`);
-
-      const body = this.add
-        .text(panelX - panelW / 2 + 18, panelY - panelH / 2 + 56, '', {
-          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '14px',
-          color: '#e8eefc',
-          lineSpacing: 6,
-          wordWrap: { width: panelW - 36 }
-        })
-        .setOrigin(0, 0);
-
-      body.setText(
-        [
-          `Cash: ${player.cash}`,
-          `Total value (cash + holdings): ${total}`,
-          `Latest sector news: ${sectorNews.length ? sectorNews.join('   •   ') : '—'}`,
-          '',
-          'Holdings:',
-          holdingsText,
-          '',
-          'Recent trades:',
-          recent.length ? recent.join('\n') : '—',
-          '',
-          'Esc = Close'
-        ].join('\n')
-      );
-
-      const close = () => {
-        if (!this.confirmOpen) return;
-        this.confirmOpen = false;
-        this.input.keyboard?.off('keydown', onKeyDownModal);
-        blocker.destroy();
-        panelBg.destroy();
-        title.destroy();
-        body.destroy();
-      };
-
-      const onKeyDownModal = (ev: KeyboardEvent) => {
-        if (ev.key === 'Escape') close();
-      };
-
-      blocker.on('pointerdown', close);
-      this.input.keyboard?.on('keydown', onKeyDownModal);
-    };
-
-    new TextButton(this, rightX + rightW / 2, headerH + 112, {
-      width: rightInnerW,
-      height: 34,
-      label: 'Portfolio & Trade History',
-      fontSize: 14,
-      onClick: openPortfolioHistory
-    });
+    // Trade history now lives in the player tab.
 
     // Trading open/close
-    new TextButton(this, rightX + rightW / 2, headerH + 160, {
-      width: rightInnerW,
-      height: 36,
-      label: state.tradingOpen ? 'Close Trading' : 'Open Trading',
-      fontSize: 14,
-      onClick: () => {
-        const next = setTradingOpen(state, !state.tradingOpen);
-        recordActivity(next, 'GM', next.tradingOpen ? 'Trading opened' : 'Trading closed', state.round);
-        this.scene.restart();
-      }
-    });
-
     // Trade info
     const tradeInfo = this.add
       .text(

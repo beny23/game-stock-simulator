@@ -63,7 +63,6 @@ export type ActivityLogEntry = {
 export type GameState = {
   version: 1;
   round: number;
-  tradingOpen: boolean;
   startingCash: number;
   players: Player[];
   stocks: Stock[];
