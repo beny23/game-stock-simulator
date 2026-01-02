@@ -464,6 +464,15 @@ export function loadGame(): GameState | undefined {
         (parsed as any).priceHistory ?? Object.fromEntries(((parsed as any).stocks ?? []).map((s: any) => [s.ticker, [s.price]]))
     };
 
+    // Save migration: older saves may not include newly-added default tickers.
+    // Merge missing defaults so the market board always shows the full roster.
+    {
+      const savedByTicker = new Map(base.stocks.map((s) => [s.ticker, s] as const));
+      const mergedDefaults = DEFAULT_STOCKS.map((d) => savedByTicker.get(d.ticker) ?? structuredClone(d));
+      const extras = base.stocks.filter((s) => !DEFAULT_STOCKS.some((d) => d.ticker === s.ticker));
+      base.stocks = [...mergedDefaults, ...extras];
+    }
+
     // Ensure we always have upcoming headlines for the ticker.
     if (!base.upcomingNews?.length) {
       base.upcomingNews = pickSectorNews(base, getEvents());

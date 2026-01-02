@@ -1,4 +1,4 @@
-import { MarketEvent, SectorId, Stock } from './types';
+import { SectorId, Stock } from './types';
 
 export const SECTORS: Array<{ id: SectorId; name: string; riskLabel: string }> = [
   { id: 'TECH_MEDIA', name: 'Technology & Media', riskLabel: 'Higher risk' },
@@ -28,64 +28,4 @@ export const DEFAULT_STOCKS: Stock[] = [
   { ticker: 'AQHV', name: 'AquaHarvest', sector: 'FOOD', price: 60, volatility: 'MED' },
   { ticker: 'GGCP', name: 'GrainGuard Co-op', sector: 'FOOD', price: 40, volatility: 'LOW' },
   { ticker: 'SSDY', name: 'SunnySide Dairy', sector: 'FOOD', price: 30, volatility: 'LOW' }
-];
-
-// Starter deck (expand later if desired). Includes a crash + recovery.
-export const DEFAULT_EVENTS: MarketEvent[] = [
-  {
-    id: 'e_bbdy_feature',
-    title: 'ByteBuddies adds a great new feature!',
-    scope: 'COMPANY',
-    target: 'BBDY',
-    impactPct: 0.05,
-    explanation: 'More people might use it, so investors feel optimistic.'
-  },
-  {
-    id: 'e_tech_privacy',
-    title: 'Tech privacy worries in the news',
-    scope: 'SECTOR',
-    target: 'TECH_MEDIA',
-    impactPct: -0.03,
-    explanation: 'Rules and trust can affect many tech companies.'
-  },
-  {
-    id: 'e_fuel_rise',
-    title: 'Fuel costs rise',
-    scope: 'SECTOR',
-    target: 'TRANSPORT',
-    impactPct: -0.03,
-    explanation: 'If fuel costs more, deliveries cost more.'
-  },
-  {
-    id: 'e_good_vibes',
-    title: 'Good vibes day (confidence)',
-    scope: 'MARKET',
-    target: 'ALL',
-    impactPct: 0.01,
-    explanation: 'Sometimes people feel optimistic and buy more.'
-  },
-  {
-    id: 'e_market_crash',
-    title: 'Market crash: Panic selling!',
-    scope: 'MARKET',
-    target: 'ALL',
-    impactPct: -0.1,
-    explanation: 'Sometimes fear spreads and many people sell at once.'
-  },
-  {
-    id: 'e_aftershock',
-    title: 'Aftershock day',
-    scope: 'MARKET',
-    target: 'ALL',
-    impactPct: -0.03,
-    explanation: 'After a crash, people can still feel nervous.'
-  },
-  {
-    id: 'e_bargain_buyers',
-    title: 'Bargain hunters buy (small bounce)',
-    scope: 'MARKET',
-    target: 'ALL',
-    impactPct: 0.03,
-    explanation: 'Some investors buy when prices look cheap.'
-  }
 ];

@@ -3,9 +3,9 @@
 This file is a ready-to-use set of **sectors**, **stocks**, and **event cards** that match the defaults in [GAME_SPEC.md](GAME_SPEC.md):
 - Ages 10–14
 - GM-led, offline
-- 10–12 stocks (here: 12)
+- 15 stocks (3 per sector)
 - 5 sectors
-- Starting prices in multiples of 10
+- Starting prices are simple integers
 - Sector risk based loosely on “real world” patterns (simplified)
 
 ## 1) Sectors (5)
@@ -15,7 +15,7 @@ This file is a ready-to-use set of **sectors**, **stocks**, and **event cards** 
 4. Health & Wellness (medium volatility)
 5. Food & Farming (lower volatility)
 
-## 2) Stocks (12)
+## 2) Stocks (15)
 Numbers are intentionally simple.
 
 Format:
@@ -57,6 +57,12 @@ Format:
   - Fundamentals: Med / High / Med
   - Runs wind farms and sells steady electricity.
 
+- HydroKite (HYDK) — Energy
+  - Start: 65
+  - Volatility: Med
+  - Fundamentals: Med / Med / Med
+  - Generates power from moving water with clever kites.
+
 ### Transport & Logistics
 - RoboRoute (RBRT) — Transport & Logistics
   - Start: 100
@@ -70,6 +76,12 @@ Format:
   - Fundamentals: High / High / Low
   - A boring-but-reliable shipping company.
 
+- BeaconHop Freight (BCHP) — Transport & Logistics
+  - Start: 75
+  - Volatility: Med
+  - Fundamentals: Med / High / Med
+  - Finds smart routes to move packages faster.
+
 ### Health & Wellness
 - MediMints (MDMT) — Health & Wellness
   - Start: 50
@@ -82,6 +94,12 @@ Format:
   - Volatility: High (the “spicier” health stock)
   - Fundamentals: Low / Low / High
   - A wearable health device that might be a big hit… or not.
+
+- VitaNudge (VITN) — Health & Wellness
+  - Start: 85
+  - Volatility: Med
+  - Fundamentals: Med / Med / Med
+  - A wellness app that helps people build healthy habits.
 
 ### Food & Farming
 - AquaHarvest (AQHV) — Food & Farming
@@ -629,8 +647,38 @@ How to run this crash (simple):
 - Expected: Up, Medium | Impact: +0.04
 - Why: New ideas can create big optimism.
 
+101) “HydroKite wins a river project”
+- Scope: Company | Target: HYDK
+- Expected: Up, Small | Impact: +0.03
+- Why: A new contract can mean more income.
+
+102) “HydroKite finds a maintenance surprise”
+- Scope: Company | Target: HYDK
+- Expected: Down, Small | Impact: -0.03
+- Why: Fixing problems can cost money and time.
+
+103) “BeaconHop opens a faster delivery route”
+- Scope: Company | Target: BCHP
+- Expected: Up, Small | Impact: +0.03
+- Why: Faster delivery can attract more customers.
+
+104) “BeaconHop faces a truck shortage”
+- Scope: Company | Target: BCHP
+- Expected: Down, Medium | Impact: -0.04
+- Why: If the company can’t deliver, it may earn less.
+
+105) “VitaNudge partners with a big school program”
+- Scope: Company | Target: VITN
+- Expected: Up, Medium | Impact: +0.04
+- Why: More users can mean more sales and steady growth.
+
+106) “VitaNudge study results are mixed”
+- Scope: Company | Target: VITN
+- Expected: Uncertain, Medium | Impact: +0.04 OR -0.04 (GM chooses which)
+- Why: Mixed news can make investors unsure.
+
 ## 4) Next decisions
 - Event deck size: current deck is ~50. Expand further if you want even more variety.
 - Do you want any camp-themed events (e.g., “rainy day affects deliveries”) to tie it into scout life?
 
-Update: deck is now ~100 (50 original + 50 added), including a market crash + recovery mini-set.
+Update: deck is now ~106 (50 original + 50 added + 6 new-company cards), including a market crash + recovery mini-set.
