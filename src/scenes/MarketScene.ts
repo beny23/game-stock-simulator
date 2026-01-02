@@ -74,16 +74,34 @@ export class MarketScene extends Phaser.Scene {
     const makeId = () => `a_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
     const activityLog = [...(state.activityLog ?? [])];
 
+    // Console scroll: 0 means show most recent entries.
+    let consoleScroll = 0;
+    const consoleLineH = 18;
+    const consolePadY = 10;
+    const maxVisibleRows = Math.max(1, Math.floor((bottomH - consolePadY * 2) / consoleLineH));
+
+    const clampConsoleScroll = () => {
+      const maxScroll = Math.max(0, activityLog.length - maxVisibleRows);
+      consoleScroll = Math.max(0, Math.min(consoleScroll, maxScroll));
+    };
+
     const renderConsole = () => {
-      const tail = activityLog.slice(-6);
-      consoleText.setText(
-        tail
-          .map((e) => `R${e.round}  ${e.actor}: ${e.message}`)
-          .join('\n')
-      );
+      clampConsoleScroll();
+
+      // Newest first.
+      const ordered = activityLog
+        .slice()
+        .reverse()
+        .map((e) => `R${e.round}  ${e.actor}: ${e.message}`);
+
+      const visible = ordered.slice(consoleScroll, consoleScroll + maxVisibleRows);
+      consoleText.setText(visible.join('\n'));
     };
 
     const recordActivity = (baseState: typeof state, actor: string, message: string, roundOverride?: number) => {
+      // If the user is looking at the most recent messages, keep the console pinned to the top.
+      const wasPinnedToTop = consoleScroll === 0;
+
       activityLog.push({
         id: makeId(),
         ts: Date.now(),
@@ -92,6 +110,8 @@ export class MarketScene extends Phaser.Scene {
         message
       });
       saveGame({ ...baseState, activityLog });
+
+      if (wasPinnedToTop) consoleScroll = 0;
       renderConsole();
     };
 
@@ -99,6 +119,36 @@ export class MarketScene extends Phaser.Scene {
 
     renderConsole();
     if (this.initMessage) recordActivity(state, 'GM', this.initMessage, state.round);
+
+    // Scrollback controls: mouse wheel over console and PageUp/PageDown.
+    const onWheel = (pointer: Phaser.Input.Pointer, _dx: number, dy: number) => {
+      if (pointer.y < bottomY) return;
+      const step = dy > 0 ? 1 : -1;
+      consoleScroll += step;
+      clampConsoleScroll();
+      renderConsole();
+    };
+    this.input.on('wheel', onWheel);
+
+    const onPageUp = () => {
+      consoleScroll += Math.max(1, Math.floor(maxVisibleRows * 0.75));
+      clampConsoleScroll();
+      renderConsole();
+    };
+    const onPageDown = () => {
+      consoleScroll -= Math.max(1, Math.floor(maxVisibleRows * 0.75));
+      clampConsoleScroll();
+      renderConsole();
+    };
+
+    this.input.keyboard?.on('keydown-PAGEUP', onPageUp);
+    this.input.keyboard?.on('keydown-PAGEDOWN', onPageDown);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.off('wheel', onWheel);
+      this.input.keyboard?.off('keydown-PAGEUP', onPageUp);
+      this.input.keyboard?.off('keydown-PAGEDOWN', onPageDown);
+    });
 
     // Layout
     const centerW = width;
