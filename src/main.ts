@@ -3,6 +3,7 @@ import { BootScene } from './scenes/BootScene';
 import { HomeScene } from './scenes/HomeScene';
 import { LobbyScene } from './scenes/LobbyScene';
 import { MarketScene } from './scenes/MarketScene';
+import { MarketTickerScene } from './scenes/MarketTickerScene';
 import { ResultsScene } from './scenes/ResultsScene';
 
 const game = new Phaser.Game({
@@ -18,7 +19,7 @@ const game = new Phaser.Game({
     width: 1280,
     height: 720
   },
-  scene: [BootScene, HomeScene, LobbyScene, MarketScene, ResultsScene]
+  scene: [BootScene, HomeScene, LobbyScene, MarketScene, MarketTickerScene, ResultsScene]
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -34,6 +34,10 @@ export class MarketScene extends Phaser.Scene {
       return;
     }
 
+    // Keep the top ticker running across MarketScene restarts.
+    if (!this.scene.isActive('marketTicker')) this.scene.launch('marketTicker');
+    this.scene.bringToTop('marketTicker');
+
     // reset modal flags each create (scene.restart reuses instance)
     this.confirmOpen = false;
 
@@ -167,12 +171,8 @@ export class MarketScene extends Phaser.Scene {
     const headerH = 70;
     const tabStripH = 42;
 
-    // Top ticker (Bloomberg-style)
+    // Top ticker (Bloomberg-style) is rendered by MarketTickerScene.
     const tickerH = 26;
-    this.add
-      .rectangle(0, 0, width, tickerH, 0x0f1730, 1)
-      .setOrigin(0, 0)
-      .setStrokeStyle(2, 0x334166, 1);
 
     const eventsById = new Map(events.map((e) => [e.id, e] as const));
 
@@ -219,24 +219,10 @@ export class MarketScene extends Phaser.Scene {
       : lastEvent?.title ?? 'No news yet';
 
     const tickerMsg = `${idxQuote}   •   ${stockQuotes.join('   •   ')}   •   ${upcomingStrip}   •   Round ${state.round}`;
-    const tickerText = this.add
-      .text(width + 20, tickerH / 2, tickerMsg, {
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '14px',
-        color: '#e8eefc'
-      })
-      .setOrigin(0, 0.5);
-
-    const speedPxPerSec = 120;
-    const travel = width + tickerText.width + 60;
-    const durationMs = Math.max(3000, (travel / speedPxPerSec) * 1000);
-    this.tweens.add({
-      targets: tickerText,
-      x: -tickerText.width - 40,
-      duration: durationMs,
-      repeat: -1,
-      onRepeat: () => tickerText.setX(width + 20)
-    });
+    // Cache and broadcast the ticker message. The ticker scene reads from the registry
+    // so it won't miss the first update when it launches.
+    this.game.registry.set('marketTicker:text', tickerMsg);
+    this.game.events.emit('marketTicker:set', { text: tickerMsg });
 
     this.add
       .text(24, 30, `Market (Round ${state.round})`, {
@@ -801,15 +787,14 @@ export class MarketScene extends Phaser.Scene {
             center.add(changeText);
 
             const ownedText = this.add
-              .text(0, tileY + 38, `x${owned}`, {
+              .text(0, tileY + 6, `x${owned}`, {
                 fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
                 fontSize: '13px',
                 color: '#ffd6a5'
               })
               .setOrigin(1, 0);
             center.add(ownedText);
-            // Keep the label right-aligned, but ensure it doesn't sit under the +/- buttons.
-            // Buttons are 30px wide and centered at btnX, so their left edge is ~btnX-15.
+            // Top-right, above the +/- buttons.
             ownedText.setX(btnX - 22);
             const buyBtn = new TextButton(this, btnX, tileY + 20, {
               width: 30,
@@ -1386,6 +1371,7 @@ export class MarketScene extends Phaser.Scene {
       hitPadding: 6,
       onClick: () => {
         recordActivity(state, 'GM', 'Ended game (results)', state.round);
+        this.scene.stop('marketTicker');
         this.scene.start('results');
       }
     }).setDepth(61);
@@ -1395,7 +1381,10 @@ export class MarketScene extends Phaser.Scene {
       width: 180,
       height: 40,
       label: 'Back to Lobby',
-      onClick: () => this.scene.start('lobby')
+      onClick: () => {
+        this.scene.stop('marketTicker');
+        this.scene.start('lobby');
+      }
     }).setScale(0.9);
 
   }
