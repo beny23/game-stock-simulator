@@ -70,6 +70,19 @@ export class LobbyScene extends Phaser.Scene {
       height: 64,
       label: 'Add Player',
       onClick: () => {
+        const isTouch = !!this.sys.game.device?.input?.touch;
+
+        // Mobile: use native prompt to reliably trigger the OS keyboard.
+        if (isTouch) {
+          const value = window.prompt('Player name')?.trim();
+          if (!value) return;
+          const next = addPlayer(state, value);
+          saveGame(next);
+          this.scene.restart();
+          return;
+        }
+
+        // Desktop/projector: keep the in-canvas keyboard input.
         const input = new KeyboardTextInput(this, width / 2, height / 2, 'Player name');
         input.open((value) => {
           if (!value) return;
