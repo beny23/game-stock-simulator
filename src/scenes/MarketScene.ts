@@ -3,6 +3,7 @@ import { SECTORS } from '../state/content';
 import {
   getPlayer,
   loadGame,
+  MARKET_INDEX_KEY,
   placeOrder,
   resolveNextRound,
   saveGame,
@@ -41,25 +42,34 @@ export class MarketScene extends Phaser.Scene {
     const events = getEvents();
     const lastEvent = state.lastEventId ? events.find((e) => e.id === state.lastEventId) : undefined;
 
-    // Bottom console
-    const consoleH = 110;
-    const consoleY = height - consoleH;
-    const usableH = height - consoleH;
+    // Bottom row: console (left) + GM buttons (right)
+    const bottomH = 110;
+    const bottomY = height - bottomH;
+    const gmW = 260;
+    const consoleW = Math.max(320, width - gmW);
+    const gmX = consoleW;
+    const usableH = height - bottomH;
     const consoleBg = this.add
-      .rectangle(0, consoleY, width, consoleH, 0x0f1730, 1)
+      .rectangle(0, bottomY, consoleW, bottomH, 0x0f1730, 1)
       .setOrigin(0, 0)
       .setStrokeStyle(2, 0x334166, 1)
       .setDepth(50);
 
     const consoleText = this.add
-      .text(16, consoleY + 10, '', {
+      .text(16, bottomY + 10, '', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '14px',
         color: '#e8eefc',
-        wordWrap: { width: width - 32 }
+        wordWrap: { width: consoleW - 32 }
       })
       .setOrigin(0, 0)
       .setDepth(51);
+
+    const gmPanelBg = this.add
+      .rectangle(gmX, bottomY, width - gmX, bottomH, 0x111a33, 0.9)
+      .setOrigin(0, 0)
+      .setStrokeStyle(2, 0x334166, 1)
+      .setDepth(60);
 
     const makeId = () => `a_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
     const activityLog = [...(state.activityLog ?? [])];
@@ -91,8 +101,7 @@ export class MarketScene extends Phaser.Scene {
     if (this.initMessage) recordActivity(state, 'GM', this.initMessage, state.round);
 
     // Layout
-    const rightW = Math.max(260, Math.floor(width * 0.2));
-    const centerW = width - rightW;
+    const centerW = width;
 
     const headerH = 70;
     const tabStripH = 42;
@@ -322,6 +331,12 @@ export class MarketScene extends Phaser.Scene {
     });
 
     const makeBulletins = () => {
+      const idxHistory = state.priceHistory?.[MARKET_INDEX_KEY] ?? [];
+      const idxNow = idxHistory.length ? idxHistory[idxHistory.length - 1] : undefined;
+      const idxPrev = idxHistory.length > 1 ? idxHistory[idxHistory.length - 2] : undefined;
+      const idxDelta = idxNow != null && idxPrev != null ? idxNow - idxPrev : undefined;
+      const idxDeltaStr = idxDelta == null ? '' : ` (${idxDelta >= 0 ? '+' : ''}${idxDelta})`;
+
       const applied = (state.currentNews ?? []).map((n) => {
         const e = eventsById.get(n.eventId);
         return {
@@ -347,7 +362,16 @@ export class MarketScene extends Phaser.Scene {
           'Tip: Buy before positive news applies. Sell before negative news applies. Diversify across sectors to reduce risk.'
       };
 
-      const all = [summary, ...applied, ...upcoming].filter((b) => b.header.trim() !== '');
+      const indexBulletin = {
+        kind: 'Market',
+        header: idxNow == null ? 'CAMP INDEX' : `CAMP INDEX • ${idxNow}${idxDeltaStr}`,
+        body:
+          idxNow == null
+            ? 'A combined market index will appear once price history is available.'
+            : 'The CAMP Index tracks the combined movement of all stocks.'
+      };
+
+      const all = [summary, indexBulletin, ...applied, ...upcoming].filter((b) => b.header.trim() !== '');
       return all.length
         ? all
         : [
@@ -668,7 +692,7 @@ export class MarketScene extends Phaser.Scene {
     }
 
     if (this.viewMode === 'overview') {
-      // Sector spotlight loop (replaces the old ticker history list)
+      // Market spotlight loop (index + sectors)
       const spotlightX = 16;
       const spotlightY = 202;
       const spotlightW = centerW - 32;
@@ -683,7 +707,7 @@ export class MarketScene extends Phaser.Scene {
       center.add(spotBg);
 
       const spotTitle = this.add
-        .text(spotlightX + 12, spotlightY + 10, 'Sector Spotlight', {
+        .text(spotlightX + 12, spotlightY + 10, 'Market Spotlight', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
           fontSize: '16px',
           color: '#b9c7ee'
@@ -762,9 +786,32 @@ export class MarketScene extends Phaser.Scene {
         });
       };
 
-      let sectorIdx = 0;
-      const applySector = (idx: number) => {
-        const sector = SECTORS[idx % SECTORS.length];
+      const spotlightItems = [{ kind: 'index' as const }, ...SECTORS.map((s) => ({ kind: 'sector' as const, sectorId: s.id }))];
+
+      let spotlightIdx = 0;
+      const applySpotlight = (idx: number) => {
+        const item = spotlightItems[idx % spotlightItems.length];
+
+        if (item.kind === 'index') {
+          const idxSeries = (history[MARKET_INDEX_KEY] ?? []).slice(-40);
+          const idxNow = idxSeries.length ? idxSeries[idxSeries.length - 1] : undefined;
+          const idxPrev = idxSeries.length > 1 ? idxSeries[idxSeries.length - 2] : undefined;
+          const idxDelta = idxNow != null && idxPrev != null ? idxNow - idxPrev : undefined;
+          const deltaStr = idxDelta == null ? '' : ` (${idxDelta >= 0 ? '+' : ''}${idxDelta})`;
+
+          sectorNameText.setText('CAMP Index');
+          listText.setText(idxNow == null ? '—' : `Index: ${idxNow}${deltaStr}`);
+          graphTitle.setText('Graph: CAMP Index (last 40)');
+
+          drawGraph(
+            [{ label: 'INDEX', values: idxSeries.length ? idxSeries : [idxNow ?? 0] }],
+            Math.max(10, graphW - 20),
+            Math.max(10, graphH - 20)
+          );
+          return;
+        }
+
+        const sector = SECTORS.find((s) => s.id === item.sectorId) ?? SECTORS[0];
         const stocks = state.stocks.filter((s) => s.sector === sector.id);
         sectorNameText.setText(sector.name);
 
@@ -787,89 +834,42 @@ export class MarketScene extends Phaser.Scene {
         drawGraph(series, Math.max(10, graphW - 20), Math.max(10, graphH - 20));
       };
 
-      applySector(sectorIdx);
+      applySpotlight(spotlightIdx);
 
       const fadeTargets = [sectorNameText, listText, graphTitle];
-      const transitionToNextSector = () => {
+      const transitionToNextSpotlight = () => {
         this.tweens.add({
           targets: [...fadeTargets, graph],
           alpha: 0,
           duration: 220,
           onComplete: () => {
-            sectorIdx = (sectorIdx + 1) % SECTORS.length;
-            applySector(sectorIdx);
+            spotlightIdx = (spotlightIdx + 1) % spotlightItems.length;
+            applySpotlight(spotlightIdx);
             this.tweens.add({ targets: [...fadeTargets, graph], alpha: 1, duration: 220 });
           }
         });
       };
 
-      const sectorTimer = this.time.addEvent({ delay: 5000, loop: true, callback: transitionToNextSector });
+      const sectorTimer = this.time.addEvent({ delay: 5000, loop: true, callback: transitionToNextSpotlight });
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sectorTimer.remove(false));
     }
 
-    // Right panel: GM controls
-    const rightX = centerW;
-    const right = new Panel(this, rightX, headerH, rightW, usableH - headerH);
-
-    const rightInnerX = rightX + 20;
-    const rightInnerW = rightW - 40;
-    const rightGap = 10;
-    const rightHalfW = (rightInnerW - rightGap) / 2;
-    const rightCol1X = rightInnerX + rightHalfW / 2;
-    const rightCol2X = rightInnerX + rightHalfW + rightGap + rightHalfW / 2;
-
-    right.add(
-      this.add
-        .text(16, 12, 'GM Controls', {
-          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '18px',
-          color: '#b9c7ee'
-        })
-        .setOrigin(0, 0)
-    );
-
-    // Selected player summary
-    const player = selectedId ? getPlayer(state, selectedId) : undefined;
-    const playerName = player?.name ?? '—';
-    const cash = player?.cash ?? 0;
-    right.add(
-      this.add
-        .text(16, 44, this.viewMode === 'overview' ? `View: Overview` : `Player: ${playerName}\nCash: ${cash}`, {
-          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '16px',
-          color: '#e8eefc',
-          lineSpacing: 6
-        })
-        .setOrigin(0, 0)
-    );
-
-    // Trade history now lives in the player tab.
-
-    // Trading open/close
-    // Trade info
-    const tradeInfo = this.add
-      .text(
-        16,
-        210,
-        this.viewMode === 'overview'
-          ? 'Click a player name to open their market board.'
-          : 'Market board is open per player.',
-        {
+    // GM buttons live bottom-right next to the console.
+    this.add
+      .text(gmX + 14, bottomY + 10, 'GM', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '14px',
-        color: '#8ea3d8',
-        wordWrap: { width: rightW - 32 }
-        }
-      )
-      .setOrigin(0, 0);
-    right.add(tradeInfo);
+        color: '#b9c7ee'
+      })
+      .setOrigin(0, 0)
+      .setDepth(61);
 
-    // Next round
-    new TextButton(this, rightX + rightW / 2, height - consoleH - 130, {
-      width: rightW - 40,
-      height: 56,
+    new TextButton(this, gmX + (width - gmX) / 2, bottomY + 44, {
+      width: Math.max(160, width - gmX - 28),
+      height: 34,
       label: 'Next Round (Resolve)',
-      fontSize: 16,
+      fontSize: 14,
+      hitPadding: 6,
       onClick: () => {
         const { next, error } = resolveNextRound(state);
         if (error) {
@@ -886,21 +886,22 @@ export class MarketScene extends Phaser.Scene {
         recordActivity(next, 'GM', `Resolved round • Applied: ${applied}`, state.round);
         this.scene.restart();
       }
-    });
+    }).setDepth(61);
 
-    new TextButton(this, rightX + rightW / 2, height - consoleH - 65, {
-      width: rightW - 40,
-      height: 52,
+    new TextButton(this, gmX + (width - gmX) / 2, bottomY + 84, {
+      width: Math.max(160, width - gmX - 28),
+      height: 34,
       label: 'End Game (Results)',
-      fontSize: 16,
+      fontSize: 14,
+      hitPadding: 6,
       onClick: () => {
         recordActivity(state, 'GM', 'Ended game (results)', state.round);
         this.scene.start('results');
       }
-    });
+    }).setDepth(61);
 
     // Back
-    new TextButton(this, 200, 34, {
+    new TextButton(this, width - 110, 34, {
       width: 180,
       height: 40,
       label: 'Back to Lobby',

@@ -7,6 +7,24 @@ const STORAGE_KEY = 'stock-camp-sim:v1';
 const INITIAL_HISTORY_POINTS = 40;
 const MAX_HISTORY_POINTS = 60;
 
+export const MARKET_INDEX_KEY = '__MARKET_INDEX__';
+
+const BASE_AVG_PRICE = DEFAULT_STOCKS.reduce((sum, s) => sum + s.price, 0) / Math.max(1, DEFAULT_STOCKS.length);
+
+function mean(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function marketIndexFromAvg(avgPrice: number): number {
+  if (!Number.isFinite(avgPrice) || avgPrice <= 0) return 0;
+  return Math.max(100, Math.round(1000 * (avgPrice / BASE_AVG_PRICE)));
+}
+
+export function marketIndexValue(stocks: Stock[]): number {
+  return marketIndexFromAvg(mean(stocks.map((s) => s.price)));
+}
+
 function makeId(prefix: string): string {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
@@ -87,6 +105,16 @@ function seedInitialPriceHistory(stocks: Stock[], points: number): Record<string
 
     out[stock.ticker] = values;
   }
+
+  // Add a combined market index series (like FTSE/Dow).
+  if (stocks.length) {
+    const idxSeries: number[] = [];
+    for (let i = 0; i < clampedPoints; i++) {
+      const avgAtI = mean(stocks.map((s) => out[s.ticker]?.[i] ?? s.price));
+      idxSeries.push(marketIndexFromAvg(avgAtI));
+    }
+    out[MARKET_INDEX_KEY] = idxSeries;
+  }
   return out;
 }
 
@@ -117,6 +145,34 @@ function ensurePriceHistory(state: GameState, minPoints: number): GameState {
 
     // Keep bounded.
     while (nextHistory[stock.ticker].length > MAX_HISTORY_POINTS) nextHistory[stock.ticker].shift();
+  }
+
+  // Recompute/ensure index history using aligned ticker histories.
+  if (state.stocks.length) {
+    const lengths = state.stocks
+      .map((s) => nextHistory[s.ticker]?.length ?? 0)
+      .filter((n) => n > 0);
+    const commonLen = lengths.length ? Math.min(...lengths) : 0;
+
+    if (commonLen > 0) {
+      const idxSeries: number[] = [];
+      for (let i = 0; i < commonLen; i++) {
+        const avgAtI = mean(
+          state.stocks.map((s) => {
+            const arr = nextHistory[s.ticker] ?? [];
+            const start = arr.length - commonLen;
+            return arr[start + i] ?? s.price;
+          })
+        );
+        idxSeries.push(marketIndexFromAvg(avgAtI));
+      }
+
+      // Keep bounded.
+      while (idxSeries.length > MAX_HISTORY_POINTS) idxSeries.shift();
+      nextHistory[MARKET_INDEX_KEY] = idxSeries;
+    } else {
+      nextHistory[MARKET_INDEX_KEY] = [marketIndexValue(state.stocks)];
+    }
   }
 
   return { ...state, priceHistory: nextHistory };
@@ -346,6 +402,14 @@ export function resolveNextRound(state: GameState): { next: GameState; error?: s
     while (arr.length > MAX_HISTORY_POINTS) arr.shift();
     nextHistory[s.ticker] = arr;
   }
+
+  // Update market index history.
+  const nextIndex = marketIndexValue(nextStocks);
+  const prevIndex = marketIndexValue(state.stocks);
+  const idxArr = nextHistory[MARKET_INDEX_KEY] ? [...nextHistory[MARKET_INDEX_KEY]] : [prevIndex];
+  idxArr.push(nextIndex);
+  while (idxArr.length > MAX_HISTORY_POINTS) idxArr.shift();
+  nextHistory[MARKET_INDEX_KEY] = idxArr;
 
   const next: GameState = {
     ...state,
