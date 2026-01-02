@@ -337,6 +337,44 @@ export class MarketScene extends Phaser.Scene {
       const idxDelta = idxNow != null && idxPrev != null ? idxNow - idxPrev : undefined;
       const idxDeltaStr = idxDelta == null ? '' : ` (${idxDelta >= 0 ? '+' : ''}${idxDelta})`;
 
+      const movers = (() => {
+        const items = state.stocks
+          .map((s) => {
+            const arr = state.priceHistory?.[s.ticker];
+            const now = arr?.length ? arr[arr.length - 1] : s.price;
+            const prev = arr && arr.length > 1 ? arr[arr.length - 2] : now;
+            const delta = now - prev;
+            const pct = prev ? delta / prev : 0;
+            return { ticker: s.ticker, name: s.name, now, prev, delta, pct };
+          })
+          .filter((x) => Number.isFinite(x.delta));
+
+        const winners = items
+          .slice()
+          .sort((a, b) => (b.pct - a.pct) || (b.delta - a.delta))
+          .slice(0, 3);
+        const losers = items
+          .slice()
+          .sort((a, b) => (a.pct - b.pct) || (a.delta - b.delta))
+          .slice(0, 3);
+
+        const fmt = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v)}`;
+        const fmtPct = (p: number) => `${p >= 0 ? '+' : ''}${Math.round(p * 100)}%`;
+
+        const winnersStr = winners.length
+          ? winners.map((w) => `${w.ticker} ${fmt(w.delta)} (${fmtPct(w.pct)})`).join('  •  ')
+          : '—';
+        const losersStr = losers.length
+          ? losers.map((l) => `${l.ticker} ${fmt(l.delta)} (${fmtPct(l.pct)})`).join('  •  ')
+          : '—';
+
+        return {
+          kind: 'Movers',
+          header: `Market Movers • Round ${state.round}`,
+          body: `Winners: ${winnersStr}\nLosers: ${losersStr}`
+        };
+      })();
+
       const applied = (state.currentNews ?? []).map((n) => {
         const e = eventsById.get(n.eventId);
         return {
@@ -371,7 +409,7 @@ export class MarketScene extends Phaser.Scene {
             : 'The CAMP Index tracks the combined movement of all stocks.'
       };
 
-      const all = [summary, indexBulletin, ...applied, ...upcoming].filter((b) => b.header.trim() !== '');
+      const all = [summary, movers, indexBulletin, ...applied, ...upcoming].filter((b) => b.header.trim() !== '');
       return all.length
         ? all
         : [
@@ -622,15 +660,18 @@ export class MarketScene extends Phaser.Scene {
             center.add(price);
 
             const ownedText = this.add
-              .text(x + colW - 46, tileY + 38, `x${owned}`, {
+              .text(0, tileY + 38, `x${owned}`, {
                 fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
                 fontSize: '13px',
                 color: '#ffd6a5'
               })
-              .setOrigin(0, 0);
+              .setOrigin(1, 0);
             center.add(ownedText);
 
             const btnX = x + colW - 18;
+            // Keep the label right-aligned, but ensure it doesn't sit under the +/- buttons.
+            // Buttons are 30px wide and centered at btnX, so their left edge is ~btnX-15.
+            ownedText.setX(btnX - 22);
             const buyBtn = new TextButton(this, btnX, tileY + 20, {
               width: 30,
               height: 24,
@@ -652,25 +693,37 @@ export class MarketScene extends Phaser.Scene {
           });
         });
 
-        // Recent trade history (inside player tab)
-        const historyX = innerX;
-        const historyY = innerY + innerH + historyGap;
-        const historyW = innerW;
+        // Bottom panels: Recent Trades (left) + Net Worth tracker (right)
+        const bottomX = innerX;
+        const bottomY = innerY + innerH + historyGap;
+        const bottomW = innerW;
+        const bottomH = historyPanelH;
+        const bottomGapX = 12;
 
-        const histBg = this.add
-          .rectangle(historyX, historyY, historyW, historyPanelH, 0x0f1730, 0.75)
+        const tradesW = Math.min(
+          Math.max(260, Math.floor(bottomW * 0.42)),
+          Math.max(260, bottomW - 260 - bottomGapX)
+        );
+        const worthW = Math.max(260, bottomW - tradesW - bottomGapX);
+
+        const tradesX = bottomX;
+        const worthX = bottomX + tradesW + bottomGapX;
+
+        // Recent trade history (inside player tab)
+        const tradesBg = this.add
+          .rectangle(tradesX, bottomY, tradesW, bottomH, 0x0f1730, 0.75)
           .setOrigin(0, 0)
           .setStrokeStyle(2, 0x334166, 1);
-        center.add(histBg);
+        center.add(tradesBg);
 
-        const histTitle = this.add
-          .text(historyX + 12, historyY + 10, 'Recent Trades', {
+        const tradesTitle = this.add
+          .text(tradesX + 12, bottomY + 10, 'Recent Trades', {
             fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
             fontSize: '14px',
             color: '#ffd6a5'
           })
           .setOrigin(0, 0);
-        center.add(histTitle);
+        center.add(tradesTitle);
 
         const recent = (state.tradeHistory ?? [])
           .filter((t) => t.playerId === p.id)
@@ -678,16 +731,173 @@ export class MarketScene extends Phaser.Scene {
           .reverse()
           .map((t) => `R${t.round}  ${t.side}  ${t.ticker}  x${t.shares}  @ ${t.price}`);
 
-        const histBody = this.add
-          .text(historyX + 12, historyY + 34, recent.length ? recent.join('\n') : '—', {
+        const tradesBody = this.add
+          .text(tradesX + 12, bottomY + 34, recent.length ? recent.join('\n') : '—', {
             fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
             fontSize: '13px',
             color: '#e8eefc',
             lineSpacing: 5,
-            wordWrap: { width: historyW - 24 }
+            wordWrap: { width: tradesW - 24 }
           })
           .setOrigin(0, 0);
-        center.add(histBody);
+        center.add(tradesBody);
+
+        // Net worth tracker
+        const worthBg = this.add
+          .rectangle(worthX, bottomY, worthW, bottomH, 0x0f1730, 0.75)
+          .setOrigin(0, 0)
+          .setStrokeStyle(2, 0x334166, 1);
+        center.add(worthBg);
+
+        const worthTitle = this.add
+          .text(worthX + 12, bottomY + 10, 'Net Worth', {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '14px',
+            color: '#ffd6a5'
+          })
+          .setOrigin(0, 0);
+        center.add(worthTitle);
+
+        const priceAtRound = (ticker: string, round: number): number => {
+          const arr = state.priceHistory?.[ticker];
+          if (!arr?.length) {
+            return state.stocks.find((s) => s.ticker === ticker)?.price ?? 0;
+          }
+          const idx = Math.max(0, Math.min(arr.length - 1, arr.length - 1 - (state.round - round)));
+          return arr[idx] ?? 0;
+        };
+
+        const playerTrades = (state.tradeHistory ?? [])
+          .filter((t) => t.playerId === p.id)
+          .slice()
+          .sort((a, b) => (a.round - b.round) || (a.ts - b.ts));
+
+        const maxRounds = 24;
+        const startRound = Math.max(1, state.round - maxRounds + 1);
+
+        let cash = state.startingCash;
+        const holdings: Record<string, number> = {};
+        let tradeIdx = 0;
+
+        const cashSeries: number[] = [];
+        const holdingsSeries: number[] = [];
+        const totalSeries: number[] = [];
+
+        for (let r = 1; r <= state.round; r++) {
+          while (tradeIdx < playerTrades.length && playerTrades[tradeIdx].round === r) {
+            const t = playerTrades[tradeIdx];
+            const amt = t.price * t.shares;
+            if (t.side === 'BUY') {
+              cash -= amt;
+              holdings[t.ticker] = (holdings[t.ticker] ?? 0) + t.shares;
+            } else {
+              cash += amt;
+              const nextShares = (holdings[t.ticker] ?? 0) - t.shares;
+              if (nextShares <= 0) delete holdings[t.ticker];
+              else holdings[t.ticker] = nextShares;
+            }
+            tradeIdx++;
+          }
+
+          if (r < startRound) continue;
+
+          let holdingsValue = 0;
+          for (const [ticker, shares] of Object.entries(holdings)) {
+            holdingsValue += priceAtRound(ticker, r) * shares;
+          }
+
+          const cashNow = Math.round(cash);
+          const holdingsNow = Math.round(holdingsValue);
+          cashSeries.push(cashNow);
+          holdingsSeries.push(holdingsNow);
+          totalSeries.push(cashNow + holdingsNow);
+        }
+
+        const cashNow = cashSeries.length ? cashSeries[cashSeries.length - 1] : p.cash;
+        const stocksNow = holdingsSeries.length ? holdingsSeries[holdingsSeries.length - 1] : 0;
+        const worthNow = totalSeries.length ? totalSeries[totalSeries.length - 1] : p.cash;
+
+        const rightEdgeX = worthX + worthW - 12;
+        const headerY = bottomY + 10;
+        const headerGap = 14;
+
+        const worthNowText = this.add
+          .text(rightEdgeX, headerY, `Total: ${worthNow}`, {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '14px',
+            color: '#e8eefc'
+          })
+          .setOrigin(1, 0);
+        center.add(worthNowText);
+
+        const stocksNowText = this.add
+          .text(0, headerY, `Stocks: ${stocksNow}`, {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '14px',
+            color: '#b9c7ee'
+          })
+          .setOrigin(1, 0);
+        stocksNowText.setX(worthNowText.x - worthNowText.width - headerGap);
+        center.add(stocksNowText);
+
+        const cashNowText = this.add
+          .text(0, headerY, `Cash: ${cashNow}`, {
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+            fontSize: '14px',
+            color: '#b9c7ee'
+          })
+          .setOrigin(1, 0);
+        cashNowText.setX(stocksNowText.x - stocksNowText.width - headerGap);
+        center.add(cashNowText);
+
+        const worthGraphX = worthX + 12;
+        const worthGraphY = bottomY + 34;
+        const worthGraphW = worthW - 24;
+        const worthGraphH = Math.max(40, bottomH - 46);
+
+        const worthGraphBorder = this.add
+          .rectangle(worthGraphX, worthGraphY, worthGraphW, worthGraphH, 0x111a33, 0.35)
+          .setOrigin(0, 0)
+          .setStrokeStyle(2, 0x334166, 1);
+        center.add(worthGraphBorder);
+
+        const worthGraph = this.add.graphics().setDepth(10);
+        worthGraph.setPosition(worthGraphX + 10, worthGraphY + 10);
+        center.add(worthGraph);
+
+        const drawWorthGraph = (series: Array<{ color: number; values: number[]; width: number }>, w: number, h: number) => {
+          worthGraph.clear();
+          const nonEmpty = series.filter((s) => s.values.length);
+          if (!nonEmpty.length) return;
+
+          const all = nonEmpty.flatMap((s) => s.values);
+          const min = Math.min(...all);
+          const max = Math.max(...all);
+          const span = max - min || 1;
+
+          nonEmpty.forEach((s) => {
+            const values = s.values;
+            worthGraph.lineStyle(s.width, s.color, 1);
+            for (let i = 0; i < values.length; i++) {
+              const t = values.length === 1 ? 0 : i / (values.length - 1);
+              const px = t * w;
+              const py = h - ((values[i] - min) / span) * h;
+              if (i === 0) worthGraph.beginPath().moveTo(px, py);
+              else worthGraph.lineTo(px, py);
+            }
+            worthGraph.strokePath();
+          });
+        };
+
+        drawWorthGraph(
+          [
+            { color: 0x6ea8fe, values: cashSeries, width: 2 },
+            { color: 0xc7f9cc, values: holdingsSeries, width: 2 },
+            { color: 0xffd6a5, values: totalSeries, width: 3 }
+          ],
+          Math.max(10, worthGraphW - 20),
+          Math.max(10, worthGraphH - 20)
+        );
       }
     }
 
@@ -733,7 +943,12 @@ export class MarketScene extends Phaser.Scene {
           wordWrap: { width: 240 }
         })
         .setOrigin(0, 0);
-      center.add(listText);
+      // We keep a container for per-line colored tickers; the placeholder text
+      // object above is replaced below.
+      listText.destroy();
+
+      const listContainer = this.add.container(spotlightX + 12, spotlightY + 64);
+      center.add(listContainer);
 
       const graphTitle = this.add
         .text(spotlightX + 270, spotlightY + 64, '', {
@@ -792,6 +1007,8 @@ export class MarketScene extends Phaser.Scene {
       const applySpotlight = (idx: number) => {
         const item = spotlightItems[idx % spotlightItems.length];
 
+        listContainer.removeAll(true);
+
         if (item.kind === 'index') {
           const idxSeries = (history[MARKET_INDEX_KEY] ?? []).slice(-40);
           const idxNow = idxSeries.length ? idxSeries[idxSeries.length - 1] : undefined;
@@ -800,7 +1017,14 @@ export class MarketScene extends Phaser.Scene {
           const deltaStr = idxDelta == null ? '' : ` (${idxDelta >= 0 ? '+' : ''}${idxDelta})`;
 
           sectorNameText.setText('CAMP Index');
-          listText.setText(idxNow == null ? '—' : `Index: ${idxNow}${deltaStr}`);
+          const idxLine = this.add
+            .text(0, 0, idxNow == null ? '—' : `Index: ${idxNow}${deltaStr}`, {
+              fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+              fontSize: '13px',
+              color: '#8ea3d8'
+            })
+            .setOrigin(0, 0);
+          listContainer.add(idxLine);
           graphTitle.setText('Graph: CAMP Index (last 40)');
 
           drawGraph(
@@ -815,10 +1039,41 @@ export class MarketScene extends Phaser.Scene {
         const stocks = state.stocks.filter((s) => s.sector === sector.id);
         sectorNameText.setText(sector.name);
 
-        const lines = stocks
-          .slice(0, 5)
-          .map((s) => `${s.ticker}  ${s.price}`);
-        listText.setText(lines.length ? lines.join('\n') : '—');
+        const shown = stocks.slice(0, 5);
+        if (!shown.length) {
+          const empty = this.add
+            .text(0, 0, '—', {
+              fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+              fontSize: '13px',
+              color: '#8ea3d8'
+            })
+            .setOrigin(0, 0);
+          listContainer.add(empty);
+        } else {
+          const lineH = 18;
+          shown.forEach((s, i) => {
+            const y = i * lineH;
+            const color = lineColors[i % lineColors.length];
+
+            const tickerText = this.add
+              .text(0, y, s.ticker, {
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+                fontSize: '13px',
+                color: `#${color.toString(16).padStart(6, '0')}`
+              })
+              .setOrigin(0, 0);
+            listContainer.add(tickerText);
+
+            const priceText = this.add
+              .text(tickerText.width + 10, y, `${s.price}`, {
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
+                fontSize: '13px',
+                color: '#8ea3d8'
+              })
+              .setOrigin(0, 0);
+            listContainer.add(priceText);
+          });
+        }
 
         if (!stocks.length) {
           graphTitle.setText('');
@@ -836,7 +1091,7 @@ export class MarketScene extends Phaser.Scene {
 
       applySpotlight(spotlightIdx);
 
-      const fadeTargets = [sectorNameText, listText, graphTitle];
+      const fadeTargets = [sectorNameText, listContainer, graphTitle];
       const transitionToNextSpotlight = () => {
         this.tweens.add({
           targets: [...fadeTargets, graph],
@@ -884,6 +1139,10 @@ export class MarketScene extends Phaser.Scene {
           .join(' | ');
 
         recordActivity(next, 'GM', `Resolved round • Applied: ${applied}`, state.round);
+
+        // After resolving, return to the Overview screen.
+        this.viewMode = 'overview';
+        this.selectedPlayerId = undefined;
         this.scene.restart();
       }
     }).setDepth(61);
