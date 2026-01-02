@@ -168,11 +168,11 @@ export class MarketScene extends Phaser.Scene {
     // Layout
     const centerW = width;
 
-    const headerH = 70;
+    const headerH = 86;
     const tabStripH = 42;
 
     // Top ticker (Bloomberg-style) is rendered by MarketTickerScene.
-    const tickerH = 26;
+    const tickerH = 34;
 
     const eventsById = new Map(events.map((e) => [e.id, e] as const));
 
@@ -225,7 +225,7 @@ export class MarketScene extends Phaser.Scene {
     this.game.events.emit('marketTicker:set', { text: tickerMsg });
 
     this.add
-      .text(24, 30, `Market (Round ${state.round})`, {
+      .text(24, tickerH + 10, `Market (Round ${state.round})`, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
         fontSize: '28px',
         color: '#e8eefc'
@@ -237,7 +237,7 @@ export class MarketScene extends Phaser.Scene {
       const widgetW = 240;
       const widgetH = 46;
       const widgetX = Math.max(24, width - 200 - widgetW);
-      const widgetY = 28;
+      const widgetY = tickerH + 8;
 
       const bg = this.add
         .rectangle(widgetX, widgetY, widgetW, widgetH, 0x0f1730, 0.9)
@@ -430,6 +430,9 @@ export class MarketScene extends Phaser.Scene {
     const centerPanelH = usableH - (headerH + tabStripH);
     const contentMaxY = centerPanelH - 12;
 
+    const OVERVIEW_BULLETIN_Y = 40;
+    const OVERVIEW_BULLETIN_H = 190;
+
     // Center: overview (news + history)
     const centerX = 0;
     const center = new Panel(this, centerX, headerH + tabStripH, centerW, centerPanelH);
@@ -608,7 +611,7 @@ export class MarketScene extends Phaser.Scene {
       const lowerThirdText = this.add
         .text(x + 14, y + h - lowerThirdH + 8, 'BULLETIN', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '14px',
+          fontSize: '16px',
           color: '#ffd6a5'
         })
         .setOrigin(0, 0);
@@ -617,7 +620,7 @@ export class MarketScene extends Phaser.Scene {
       const titleText = this.add
         .text(textX, y + 18, '', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '18px',
+          fontSize: '22px',
           color: '#e8eefc',
           wordWrap: { width: textW }
         })
@@ -627,7 +630,7 @@ export class MarketScene extends Phaser.Scene {
       const bodyText = this.add
         .text(textX, y + 52, '', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '14px',
+          fontSize: '18px',
           color: '#b9c7ee',
           lineSpacing: 6,
           wordWrap: { width: textW }
@@ -691,7 +694,7 @@ export class MarketScene extends Phaser.Scene {
           .setOrigin(0, 0)
       );
 
-      buildTvBulletin(16, 40, centerW - 32, 150);
+      buildTvBulletin(16, OVERVIEW_BULLETIN_Y, centerW - 32, OVERVIEW_BULLETIN_H);
     } else {
       // Player tab: embedded market board only (no news clutter here).
       const p = selectedId ? getPlayer(state, selectedId) : undefined;
@@ -1042,7 +1045,7 @@ export class MarketScene extends Phaser.Scene {
     if (this.viewMode === 'overview') {
       // Market spotlight loop (index + sectors)
       const spotlightX = 16;
-      const spotlightY = 202;
+      const spotlightY = OVERVIEW_BULLETIN_Y + OVERVIEW_BULLETIN_H + 18;
       const spotlightW = centerW - 32;
       const spotlightH = Math.max(160, centerPanelH - spotlightY - 18);
 
@@ -1074,11 +1077,11 @@ export class MarketScene extends Phaser.Scene {
         .setOrigin(0, 0);
       center.add(sectorNameText);
 
-      const listContainer = this.add.container(spotlightX + 12, spotlightY + 64);
+      const listContainer = this.add.container(spotlightX + 12, spotlightY + 56);
       center.add(listContainer);
 
       const graphTitle = this.add
-        .text(spotlightX + 270, spotlightY + 64, '', {
+        .text(spotlightX + 270, spotlightY + 56, '', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
           fontSize: '14px',
           color: '#ffd6a5'
@@ -1088,15 +1091,17 @@ export class MarketScene extends Phaser.Scene {
 
       // Reserve a right-side column for the in-depth news panel.
       const rightPad = 12;
-      const newsW = Math.min(340, Math.max(240, Math.floor(spotlightW * 0.28)));
+      const newsW = Math.min(460, Math.max(300, Math.floor(spotlightW * 0.38)));
       const newsX = spotlightX + spotlightW - rightPad - newsW;
-      const newsY = spotlightY + 64;
-      const newsH = Math.max(80, spotlightH - (newsY - spotlightY) - 12);
+      // Move up a bit so we get more vertical room for large projector text.
+      const newsY = spotlightY + 34;
+      const newsH = Math.max(90, spotlightH - (newsY - spotlightY) - 8);
 
       const graphX = spotlightX + 270;
-      const graphY = spotlightY + 90;
-      const graphW = Math.max(160, newsX - 12 - graphX);
-      const graphH = Math.max(70, spotlightH - 110);
+      const graphY = spotlightY + 82;
+      // Leave a slightly larger gutter so the graph is a bit narrower and the news has room.
+      const graphW = Math.max(120, newsX - 28 - graphX);
+      const graphH = Math.max(90, spotlightH - 96);
 
       const newsBg = this.add
         .rectangle(newsX, newsY, newsW, newsH, 0x111a33, 0.35)
@@ -1107,7 +1112,7 @@ export class MarketScene extends Phaser.Scene {
       const newsTitle = this.add
         .text(newsX + 10, newsY + 8, 'Sector News', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '14px',
+          fontSize: '18px',
           color: '#ffd6a5'
         })
         .setOrigin(0, 0);
@@ -1116,7 +1121,7 @@ export class MarketScene extends Phaser.Scene {
       const newsBody = this.add
         .text(newsX + 10, newsY + 30, '—', {
           fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-          fontSize: '13px',
+          fontSize: '17px',
           color: '#b9c7ee',
           lineSpacing: 6,
           wordWrap: { width: newsW - 20 }
@@ -1377,7 +1382,7 @@ export class MarketScene extends Phaser.Scene {
     }).setDepth(61);
 
     // Back
-    new TextButton(this, width - 110, 34, {
+    new TextButton(this, width - 110, tickerH + 14, {
       width: 180,
       height: 40,
       label: 'Back to Lobby',

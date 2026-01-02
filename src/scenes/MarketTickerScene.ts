@@ -16,7 +16,7 @@ export class MarketTickerScene extends Phaser.Scene {
 
   create() {
     const { width } = this.scale;
-    const tickerH = 26;
+    const tickerH = 34;
 
     this.bg = this.add
       .rectangle(0, 0, width, tickerH, 0x0f1730, 1)
@@ -26,7 +26,7 @@ export class MarketTickerScene extends Phaser.Scene {
     this.textObj = this.add
       .text(width + 20, tickerH / 2, '', {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '14px',
+        fontSize: '18px',
         color: '#e8eefc'
       })
       .setOrigin(0, 0.5);

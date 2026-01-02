@@ -13,7 +13,7 @@ export class HomeScene extends Phaser.Scene {
     const pad = 32;
 
     // Top ticker (Bloomberg-style)
-    const tickerH = 26;
+    const tickerH = 34;
     this.add
       .rectangle(0, 0, width, tickerH, 0x0f1730, 1)
       .setOrigin(0, 0)
@@ -26,7 +26,7 @@ export class HomeScene extends Phaser.Scene {
     const tickerText = this.add
       .text(width + 20, tickerH / 2, tickerMsg, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '14px',
+        fontSize: '18px',
         color: '#e8eefc'
       })
       .setOrigin(0, 0.5);
