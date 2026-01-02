@@ -9,9 +9,14 @@ const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
   backgroundColor: '#0b1020',
+  input: {
+    topOnly: true
+  },
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 1280,
+    height: 720
   },
   scene: [BootScene, HomeScene, LobbyScene, MarketScene, ResultsScene]
 });

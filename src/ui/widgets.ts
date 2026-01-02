@@ -5,6 +5,8 @@ export type ButtonOpts = {
   height: number;
   label: string;
   onClick: () => void;
+  fontSize?: number;
+  hitPadding?: number;
 };
 
 export class TextButton extends Phaser.GameObjects.Container {
@@ -22,7 +24,7 @@ export class TextButton extends Phaser.GameObjects.Container {
     this.text = scene.add
       .text(0, 0, opts.label, {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial',
-        fontSize: '20px',
+        fontSize: `${opts.fontSize ?? 20}px`,
         color: '#e8eefc'
       })
       .setOrigin(0.5);
@@ -30,14 +32,19 @@ export class TextButton extends Phaser.GameObjects.Container {
     this.add([this.bg, this.text]);
 
     this.setSize(opts.width, opts.height);
-    this.setInteractive(new Phaser.Geom.Rectangle(-opts.width / 2, -opts.height / 2, opts.width, opts.height), Phaser.Geom.Rectangle.Contains);
+    const pad = opts.hitPadding ?? 0;
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(-opts.width / 2 - pad, -opts.height / 2 - pad, opts.width + pad * 2, opts.height + pad * 2),
+      Phaser.Geom.Rectangle.Contains
+    );
 
     this.on('pointerover', () => this.bg.setFillStyle(0x25335a, 1));
     this.on('pointerout', () => this.bg.setFillStyle(0x1f2a44, 1));
-    this.on('pointerdown', () => this.bg.setFillStyle(0x2e3f70, 1));
-    this.on('pointerup', () => {
-      this.bg.setFillStyle(0x25335a, 1);
+    this.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event?: Event) => {
+      event?.stopPropagation();
+      this.bg.setFillStyle(0x2e3f70, 1);
       opts.onClick();
+      this.bg.setFillStyle(0x25335a, 1);
     });
 
     scene.add.existing(this);

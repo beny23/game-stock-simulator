@@ -1,6 +1,6 @@
-import { DEFAULT_STOCKS } from './content';
+import { DEFAULT_STOCKS, SECTORS } from './content';
 import { EVENT_DECK } from './eventDeck';
-import { GameState, MarketEvent, OrderSide, Player, Stock } from './types';
+import { GameState, LastRoundNewsEntry, MarketEvent, OrderSide, Player, Stock, TradeHistoryEntry } from './types';
 
 const STORAGE_KEY = 'stock-camp-sim:v1';
 
@@ -9,17 +9,76 @@ function makeId(prefix: string): string {
 }
 
 export function newGame(startingCash = 1000): GameState {
-  return {
+  const tempState: GameState = {
     version: 1,
     round: 1,
     tradingOpen: false,
     startingCash,
     players: [],
     stocks: structuredClone(DEFAULT_STOCKS),
+    priceHistory: Object.fromEntries(structuredClone(DEFAULT_STOCKS).map((s) => [s.ticker, [s.price]])),
     selectedEventId: undefined,
     selectedEventAlt: false,
-    roundNetShares: {}
+    lastEventId: undefined,
+    lastRoundNews: [],
+    currentNews: [],
+    upcomingNews: [],
+    activityLog: [],
+    roundNetShares: {},
+    tradeHistory: []
   };
+
+  // Pre-generate upcoming headlines so players can "trade the news".
+  const upcoming = pickSectorNews(tempState, getEvents());
+
+  return {
+    ...tempState,
+    upcomingNews: upcoming
+  };
+}
+
+function pickSectorNews(state: GameState, events: MarketEvent[]): LastRoundNewsEntry[] {
+  const tickersBySector = new Map(
+    SECTORS.map(
+      (s) => [s.id, new Set(state.stocks.filter((st) => st.sector === s.id).map((st) => st.ticker))] as const
+    )
+  );
+
+  return SECTORS.map((sector) => {
+    const sectorTickers = tickersBySector.get(sector.id) ?? new Set<string>();
+
+    // Prefer sector-wide headlines so multiple tickers move.
+    const sectorWide = events.filter((e) => e.scope === 'SECTOR' && e.target === sector.id);
+    const companyWide = events.filter((e) => e.scope === 'COMPANY' && sectorTickers.has(e.target));
+    const marketWide = events.filter((e) => e.scope === 'MARKET' && e.target === 'ALL');
+
+    const pool = sectorWide.length ? sectorWide : companyWide.length ? companyWide : marketWide.length ? marketWide : events;
+    const choice = pool[Math.floor(Math.random() * pool.length)];
+    return { sectorId: sector.id, sectorName: sector.name, eventId: choice.id };
+  });
+}
+
+function appendTradeHistory(
+  state: GameState,
+  player: Player,
+  ticker: string,
+  side: OrderSide,
+  shares: number,
+  price: number
+): TradeHistoryEntry[] {
+  const entry: TradeHistoryEntry = {
+    id: makeId('t'),
+    ts: Date.now(),
+    round: state.round,
+    playerId: player.id,
+    playerName: player.name,
+    ticker,
+    side,
+    shares,
+    price
+  };
+
+  return [...(state.tradeHistory ?? []), entry];
 }
 
 export function addPlayer(state: GameState, name: string): GameState {
@@ -95,7 +154,8 @@ export function placeOrder(
 
     const nextPlayers = state.players.map((p) => (p.id === playerId ? nextPlayer : p));
     const nextNet = { ...state.roundNetShares, [ticker]: (state.roundNetShares[ticker] ?? 0) + shares };
-    return { next: { ...state, players: nextPlayers, roundNetShares: nextNet } };
+    const nextHistory = appendTradeHistory(state, nextPlayer, ticker, side, shares, stock.price);
+    return { next: { ...state, players: nextPlayers, roundNetShares: nextNet, tradeHistory: nextHistory } };
   }
 
   // SELL
@@ -114,7 +174,8 @@ export function placeOrder(
 
   const nextPlayers = state.players.map((p) => (p.id === playerId ? nextPlayer : p));
   const nextNet = { ...state.roundNetShares, [ticker]: (state.roundNetShares[ticker] ?? 0) - shares };
-  return { next: { ...state, players: nextPlayers, roundNetShares: nextNet } };
+  const nextHistory = appendTradeHistory(state, nextPlayer, ticker, side, shares, stock.price);
+  return { next: { ...state, players: nextPlayers, roundNetShares: nextNet, tradeHistory: nextHistory } };
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -138,24 +199,35 @@ function isCrashEvent(event: MarketEvent): boolean {
 
 export function resolveNextRound(state: GameState): { next: GameState; error?: string; appliedEvent?: MarketEvent } {
   const events = getEvents();
-  const event = state.selectedEventId ? events.find((e) => e.id === state.selectedEventId) : undefined;
-  if (!event) return { next: state, error: 'Pick an event card first.' };
+  if (!events.length) return { next: state, error: 'No events available.' };
 
-  const impact = state.selectedEventAlt && event.impactPctAlt != null ? event.impactPctAlt : event.impactPct;
+  const upcoming = state.upcomingNews?.length ? state.upcomingNews : pickSectorNews(state, events);
+
+  const eventsById = new Map(events.map((e) => [e.id, e] as const));
+  const chosenEvents = upcoming.map((n) => eventsById.get(n.eventId)).filter((e): e is MarketEvent => !!e);
+  const lastEvent = chosenEvents[chosenEvents.length - 1];
 
   const nextStocks = state.stocks.map((s) => {
-    let eventImpact = 0;
-    if (event.scope === 'MARKET' && event.target === 'ALL') {
-      eventImpact = impact;
-      // Simple "defensive sector" teaching moment for the crash card.
-      if (isCrashEvent(event) && impact <= -0.08 && s.sector === 'FOOD') {
-        eventImpact = -0.06;
+    let eventImpactSum = 0;
+    for (const ev of chosenEvents) {
+      const impact = ev.impactPct;
+
+      if (ev.scope === 'MARKET' && ev.target === 'ALL') {
+        let add = impact;
+        // Simple "defensive sector" teaching moment for the crash card.
+        if (isCrashEvent(ev) && impact <= -0.08 && s.sector === 'FOOD') {
+          add = -0.06;
+        }
+        eventImpactSum += add;
+      } else if (ev.scope === 'SECTOR' && ev.target === s.sector) {
+        eventImpactSum += impact;
+      } else if (ev.scope === 'COMPANY' && ev.target === s.ticker) {
+        eventImpactSum += impact;
       }
-    } else if (event.scope === 'SECTOR' && event.target === s.sector) {
-      eventImpact = impact;
-    } else if (event.scope === 'COMPANY' && event.target === s.ticker) {
-      eventImpact = impact;
     }
+
+    // Avoid absurd compounding if there are many players.
+    eventImpactSum = clamp(eventImpactSum, -0.25, 0.25);
 
     // small imbalance effect based on net shares this round
     const netShares = state.roundNetShares[s.ticker] ?? 0;
@@ -164,23 +236,39 @@ export function resolveNextRound(state: GameState): { next: GameState; error?: s
     const noiseRange = noiseForVolatility(s.volatility);
     const noise = (Math.random() * 2 - 1) * noiseRange;
 
-    const pct = eventImpact + imbalance + noise;
-    const nextPrice = Math.max(10, Math.round((s.price * (1 + pct)) / 10) * 10); // keep multiples of 10
+    const pct = clamp(eventImpactSum + imbalance + noise, -0.3, 0.3);
+    // Round to whole coins so changes are visible on the board.
+    const nextPrice = Math.max(10, Math.round(s.price * (1 + pct)));
 
     return { ...s, price: nextPrice };
   });
+
+  const prevHistory = state.priceHistory ?? Object.fromEntries(state.stocks.map((s) => [s.ticker, [s.price]]));
+  const nextHistory: Record<string, number[]> = { ...prevHistory };
+  for (const s of nextStocks) {
+    const arr = nextHistory[s.ticker] ? [...nextHistory[s.ticker]] : [];
+    arr.push(s.price);
+    // Keep history bounded so saves stay small.
+    while (arr.length > 60) arr.shift();
+    nextHistory[s.ticker] = arr;
+  }
 
   const next: GameState = {
     ...state,
     round: state.round + 1,
     tradingOpen: false,
     stocks: nextStocks,
+    priceHistory: nextHistory,
     roundNetShares: {},
     selectedEventId: undefined,
-    selectedEventAlt: false
+    selectedEventAlt: false,
+    lastEventId: lastEvent?.id,
+    lastRoundNews: upcoming,
+    currentNews: upcoming,
+    upcomingNews: pickSectorNews({ ...state, stocks: nextStocks }, events)
   };
 
-  return { next, appliedEvent: event };
+  return { next, appliedEvent: lastEvent };
 }
 
 export function saveGame(state: GameState): void {
@@ -193,7 +281,46 @@ export function loadGame(): GameState | undefined {
   try {
     const parsed = JSON.parse(raw) as GameState;
     if (parsed?.version !== 1) return undefined;
-    return parsed;
+    const rawLastRoundNews = (parsed as any).lastRoundNews;
+    const lastRoundNews = Array.isArray(rawLastRoundNews)
+      ? rawLastRoundNews.filter(
+          (n: any) => typeof n?.sectorId === 'string' && typeof n?.sectorName === 'string' && typeof n?.eventId === 'string'
+        )
+      : [];
+
+    const rawCurrentNews = (parsed as any).currentNews;
+    const currentNews = Array.isArray(rawCurrentNews)
+      ? rawCurrentNews.filter(
+          (n: any) => typeof n?.sectorId === 'string' && typeof n?.sectorName === 'string' && typeof n?.eventId === 'string'
+        )
+      : lastRoundNews;
+
+    const rawUpcomingNews = (parsed as any).upcomingNews;
+    const upcomingNews = Array.isArray(rawUpcomingNews)
+      ? rawUpcomingNews.filter(
+          (n: any) => typeof n?.sectorId === 'string' && typeof n?.sectorName === 'string' && typeof n?.eventId === 'string'
+        )
+      : [];
+
+    const base: GameState = {
+      ...parsed,
+      roundNetShares: parsed.roundNetShares ?? {},
+      tradeHistory: (parsed as any).tradeHistory ?? [],
+      lastEventId: (parsed as any).lastEventId ?? undefined,
+      lastRoundNews,
+      currentNews,
+      upcomingNews,
+      activityLog: (parsed as any).activityLog ?? [],
+      priceHistory:
+        (parsed as any).priceHistory ?? Object.fromEntries((parsed.stocks ?? []).map((s: any) => [s.ticker, [s.price]]))
+    };
+
+    // Ensure we always have upcoming headlines for the ticker.
+    if (!base.upcomingNews?.length) {
+      base.upcomingNews = pickSectorNews(base, getEvents());
+    }
+
+    return base;
   } catch {
     return undefined;
   }

@@ -96,11 +96,5 @@ export class LobbyScene extends Phaser.Scene {
       label: 'Back to Home',
       onClick: () => this.scene.start('home')
     });
-
-    const onResize = () => this.scene.restart();
-    this.scale.on('resize', onResize);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.scale.off('resize', onResize);
-    });
   }
 }

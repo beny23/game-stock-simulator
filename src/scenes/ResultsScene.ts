@@ -73,10 +73,6 @@ export class ResultsScene extends Phaser.Scene {
       }
     });
 
-    const onResize = () => this.scene.restart();
-    this.scale.on('resize', onResize);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.scale.off('resize', onResize);
-    });
+      // With Scale.FIT, Phaser automatically scales to the screen.
   }
 }
