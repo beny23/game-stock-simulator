@@ -775,11 +775,25 @@ export class MarketScene extends Phaser.Scene {
           .setOrigin(0, 0);
         center.add(tradesTitle);
 
-        const recent = (state.tradeHistory ?? [])
-          .filter((t) => t.playerId === p.id)
-          .slice(-8)
-          .reverse()
-          .map((t) => `R${t.round}  ${t.side}  ${t.ticker}  x${t.shares}  @ ${t.price}`);
+        const recent = (() => {
+          const trades = (state.tradeHistory ?? [])
+            .filter((t) => t.playerId === p.id)
+            .slice()
+            .sort((a, b) => (b.round - a.round) || (b.ts - a.ts));
+
+          const groups: Array<{ round: number; side: string; ticker: string; shares: number; price: number }> = [];
+          for (const t of trades) {
+            const last = groups[groups.length - 1];
+            if (last && last.round === t.round && last.side === t.side && last.ticker === t.ticker && last.price === t.price) {
+              last.shares += t.shares;
+            } else {
+              groups.push({ round: t.round, side: t.side, ticker: t.ticker, shares: t.shares, price: t.price });
+            }
+            if (groups.length >= 8) break;
+          }
+
+          return groups.map((g) => `R${g.round}  ${g.side}  ${g.ticker}  x${g.shares}  @ ${g.price}`);
+        })();
 
         const tradesBody = this.add
           .text(tradesX + 12, bottomY + 34, recent.length ? recent.join('\n') : '—', {
